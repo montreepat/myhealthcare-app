@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Bell, MessageCircle, CheckCircle2, Smartphone, Clock, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Bell, MessageCircle, CheckCircle2, Smartphone, Clock, ShieldCheck, RefreshCw, UserCircle } from 'lucide-react';
+import { useProfiles } from '@/hooks/useProfiles';
 
 const CONVEX_WEBHOOK_URL = 'https://rightful-bullfrog-554.convex.site/line-webhook';
 
-function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 export default function LineTab() {
-  const [otp] = useState(generateOtp);
+  const { activeMember } = useProfiles();
+  const otp = activeMember?.otp ?? '000000';
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -58,6 +56,10 @@ export default function LineTab() {
           </div>
 
           <div className="text-center">
+            <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent-50 px-3 py-1 text-xs font-medium text-accent-700">
+              <UserCircle className="h-3.5 w-3.5" />
+              รหัสสำหรับ {activeMember?.full_name ?? 'โปรไฟล์นี้'}
+            </span>
             <p className="mb-3 text-sm font-medium text-slate-600">รหัสเชื่อมต่อ (OTP)</p>
             <div className="flex justify-center gap-2 sm:gap-3" onClick={handleCopy}>
               {otpDigits.map((digit, idx) => (
