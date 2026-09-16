@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Calendar, FlaskConical, Bell, Heart, LogOut } from 'lucide-react';
+import { Calendar, FlaskConical, Bell, Heart, LogOut, UserCircle } from 'lucide-react';
 import AppointmentsTab from '@/components/AppointmentsTab';
 import LabResultsTab from '@/components/LabResultsTab';
 import LineTab from '@/components/LineTab';
+import ProfileTab from '@/components/ProfileTab';
 import LoginScreen from '@/components/LoginScreen';
 import { useSession } from '@/hooks/useSession';
 
-type Tab = 'appointments' | 'lab' | 'line';
+type Tab = 'profile' | 'appointments' | 'lab' | 'line';
 
 const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
+  { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: UserCircle },
   { id: 'appointments', label: 'ตารางนัดหมาย', icon: Calendar },
   { id: 'lab', label: 'ผลแลป & สุขภาพ', icon: FlaskConical },
   { id: 'line', label: 'แจ้งเตือน LINE', icon: Bell },
@@ -17,7 +19,7 @@ const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
 function getTabFromUrl(): Tab {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'lab' || tab === 'line') return tab;
+  if (tab === 'profile' || tab === 'lab' || tab === 'line') return tab;
   return 'appointments';
 }
 
@@ -96,6 +98,7 @@ function App() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-5 pb-24">
+        {activeTab === 'profile' && <ProfileTab />}
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'lab' && <LabResultsTab />}
         {activeTab === 'line' && <LineTab />}

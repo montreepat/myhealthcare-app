@@ -1,6 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Calendar, Plus, Stethoscope, Building2, Clock, UtensilsCrossed, X, Trash2, AlertCircle } from 'lucide-react';
-import { supabase, type Appointment, type AppointmentInsert } from '@/lib/supabase';
+import { useState } from 'react';
+import { Calendar, Plus, Stethoscope, Building2, Clock, UtensilsCrossed, X, Trash2, AlertCircle, Check } from 'lucide-react';
+import {
+  getAppointments,
+  addAppointment,
+  deleteAppointment,
+  getDoctors,
+  addDoctor,
+  getHospitals,
+  addHospital,
+  type Appointment,
+  type AppointmentInsert,
+} from '@/lib/store';
 
 const THAI_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -13,17 +23,100 @@ function formatDateThai(dt: string): { date: string; time: string; day: string }
   return { date, time, day: dayName };
 }
 
-function toLocalInputValue(date: Date): string {
-  const off = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - off * 60000);
-  return local.toISOString().slice(0, 16);
+type SelectWithAddProps = {
+  label: string;
+  icon: typeof Stethoscope;
+  options: string[];
+  value: string;
+  placeholder: string;
+  addPlaceholder: string;
+  onChange: (value: string) => void;
+  onAdd: (name: string) => void;
+};
+
+function SelectWithAdd({ label, icon: Icon, options, value, placeholder, addPlaceholder, onChange, onAdd }: SelectWithAddProps) {
+  const [adding, setAdding] = useState(false);
+  const [newValue, setNewValue] = useState('');
+
+  const confirmAdd = () => {
+    const trimmed = newValue.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    onChange(trimmed);
+    setNewValue('');
+    setAdding(false);
+  };
+
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
+      {!adding ? (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Icon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <select
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            >
+              <option value="">{placeholder}</option>
+              {options.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 px-3 text-sm font-medium text-brand-600 transition-all hover:bg-brand-50"
+          >
+            <Plus className="h-4 w-4" />
+            เพิ่มรายการ
+          </button>
+        </div>
+      ) : (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            autoFocus
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                e.preventDefault();
+                confirmAdd();
+              }
+            }}
+            placeholder={addPlaceholder}
+            className="w-full flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+          />
+          <button
+            type="button"
+            onClick={confirmAdd}
+            className="flex shrink-0 items-center justify-center rounded-xl bg-brand-600 px-3 text-white transition-all hover:bg-brand-700"
+          >
+            <Check className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAdding(false); setNewValue(''); }}
+            className="flex shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 text-slate-500 transition-all hover:bg-slate-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AppointmentsTab() {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => getAppointments());
+  const [doctors, setDoctors] = useState<string[]>(() => getDoctors());
+  const [hospitals, setHospitals] = useState<string[]>(() => getHospitals());
   const [showModal, setShowModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<AppointmentInsert>({
@@ -34,55 +127,30 @@ export default function AppointmentsTab() {
     special_instructions: '',
   });
 
-  const fetchAppointments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const { data, error: err } = await supabase
-      .from('appointments')
-      .select('*')
-      .order('appointment_datetime', { ascending: true });
-    if (err) {
-      setError('ไม่สามารถดึงข้อมูลนัดหมายได้');
-    } else {
-      setAppointments(data || []);
-    }
-    setLoading(false);
-  }, []);
+  const refresh = () => setAppointments(getAppointments());
 
-  useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.topic || !form.doctor_clinic || !form.appointment_datetime || !form.hospital) {
       setError('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
-    setSubmitting(true);
     setError(null);
-    const { error: err } = await supabase.from('appointments').insert({
+    addAppointment({
       topic: form.topic,
       doctor_clinic: form.doctor_clinic,
       appointment_datetime: new Date(form.appointment_datetime).toISOString(),
       hospital: form.hospital,
       special_instructions: form.special_instructions || null,
     });
-    setSubmitting(false);
-    if (err) {
-      setError('บันทึกนัดหมายไม่สำเร็จ กรุณาลองอีกครั้ง');
-      return;
-    }
     setShowModal(false);
     setForm({ topic: '', doctor_clinic: '', appointment_datetime: '', hospital: '', special_instructions: '' });
-    fetchAppointments();
+    refresh();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error: err } = await supabase.from('appointments').delete().eq('id', id);
-    if (!err) {
-      setAppointments((prev) => prev.filter((a) => a.id !== id));
-    }
+  const handleDelete = (id: string) => {
+    deleteAppointment(id);
+    refresh();
   };
 
   const now = new Date();
@@ -102,20 +170,7 @@ export default function AppointmentsTab() {
         </button>
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-200 border-t-brand-600" />
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {!loading && upcoming.length === 0 && past.length === 0 && (
+      {upcoming.length === 0 && past.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Calendar className="mb-3 h-12 w-12 text-slate-300" />
           <p className="text-slate-400">ยังไม่มีนัดหมาย กดปุ่ม "เพิ่มนัดหมายใหม่" เพื่อเริ่ม</p>
@@ -207,7 +262,7 @@ export default function AppointmentsTab() {
           onClick={() => setShowModal(false)}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl animate-slide-up sm:rounded-3xl"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl animate-slide-up sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-5 flex items-center justify-between">
@@ -230,32 +285,35 @@ export default function AppointmentsTab() {
                   className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                 />
               </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">แพทย์/คลินิก</label>
-                <input
-                  type="text"
-                  value={form.doctor_clinic}
-                  onChange={(e) => setForm({ ...form, doctor_clinic: e.target.value })}
-                  placeholder="เช่น น.พ. สมชาย คลินิกหัวใจ"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                />
-              </div>
+
+              <SelectWithAdd
+                label="แพทย์"
+                icon={Stethoscope}
+                options={doctors}
+                value={form.doctor_clinic}
+                placeholder="เลือกแพทย์"
+                addPlaceholder="ชื่อแพทย์ใหม่ เช่น น.พ.สมชาย"
+                onChange={(v) => setForm((f) => ({ ...f, doctor_clinic: v }))}
+                onAdd={(name) => setDoctors(addDoctor(name))}
+              />
+
+              <SelectWithAdd
+                label="โรงพยาบาล"
+                icon={Building2}
+                options={hospitals}
+                value={form.hospital}
+                placeholder="เลือกโรงพยาบาล"
+                addPlaceholder="ชื่อโรงพยาบาลใหม่"
+                onChange={(v) => setForm((f) => ({ ...f, hospital: v }))}
+                onAdd={(name) => setHospitals(addHospital(name))}
+              />
+
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">วันเวลานัดหมาย</label>
                 <input
                   type="datetime-local"
                   value={form.appointment_datetime}
                   onChange={(e) => setForm({ ...form, appointment_datetime: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">สถานพยาบาล</label>
-                <input
-                  type="text"
-                  value={form.hospital}
-                  onChange={(e) => setForm({ ...form, hospital: e.target.value })}
-                  placeholder="เช่น โรงพยาบาลจุฬาลงกรณ์"
                   className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
                 />
               </div>
@@ -285,10 +343,9 @@ export default function AppointmentsTab() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="flex-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-brand-700 hover:shadow-md active:scale-95 disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-brand-700 hover:shadow-md active:scale-95"
                 >
-                  {submitting ? 'กำลังบันทึก...' : 'บันทึกนัดหมาย'}
+                  บันทึกนัดหมาย
                 </button>
               </div>
             </form>
