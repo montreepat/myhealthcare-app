@@ -51,6 +51,7 @@ const KEYS = {
   profile: 'myhealthcare_profile',
   doctors: 'myhealthcare_doctors',
   hospitals: 'myhealthcare_hospitals',
+  seeded: 'myhealthcare_seeded_v1',
 };
 
 const DEFAULT_DOCTORS = ['พญ.อัญชิสา'];
@@ -78,6 +79,76 @@ function uid(): string {
     return crypto.randomUUID();
   }
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+/* ---------- Initial seed ---------- */
+// Seeds stable starter data exactly once per browser so the app never opens
+// empty. It only writes keys that have never been set, and records a
+// `seeded` flag so it never overwrites data the user later edits or clears.
+
+function daysFromNow(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(9, 0, 0, 0);
+  // to yyyy-MM-ddTHH:mm for datetime-local inputs
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function initStore(): void {
+  try {
+    if (localStorage.getItem(KEYS.seeded)) return;
+
+    if (localStorage.getItem(KEYS.profile) === null) {
+      write<Profile>(KEYS.profile, { full_name: 'คุณสมชาย ใจดี', weight: 68, height: 170 });
+    }
+    if (localStorage.getItem(KEYS.doctors) === null) {
+      write<string[]>(KEYS.doctors, DEFAULT_DOCTORS);
+    }
+    if (localStorage.getItem(KEYS.hospitals) === null) {
+      write<string[]>(KEYS.hospitals, DEFAULT_HOSPITALS);
+    }
+    if (localStorage.getItem(KEYS.appointments) === null) {
+      const seed: Appointment[] = [
+        {
+          id: uid(),
+          topic: 'ตรวจสุขภาพประจำปี',
+          doctor_clinic: DEFAULT_DOCTORS[0],
+          appointment_datetime: daysFromNow(7),
+          hospital: DEFAULT_HOSPITALS[0],
+          special_instructions: 'งดน้ำงดอาหารก่อนเจาะเลือด 8 ชั่วโมง',
+          created_at: new Date().toISOString(),
+        },
+      ];
+      write<Appointment[]>(KEYS.appointments, seed);
+    }
+    if (localStorage.getItem(KEYS.labs) === null) {
+      const seed: LabResult[] = [
+        {
+          id: uid(),
+          exam_date: isoDaysAgo(30),
+          bp_systolic: 120,
+          bp_diastolic: 80,
+          hba1c: 5.4,
+          ldl: 110,
+          hdl: 55,
+          created_at: new Date().toISOString(),
+        },
+      ];
+      write<LabResult[]>(KEYS.labs, seed);
+    }
+
+    localStorage.setItem(KEYS.seeded, '1');
+  } catch {
+    // ignore storage errors (e.g. private mode)
+  }
 }
 
 /* ---------- Appointments ---------- */
