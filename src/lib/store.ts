@@ -51,7 +51,7 @@ const KEYS = {
   profile: 'myhealthcare_profile',
   doctors: 'myhealthcare_doctors',
   hospitals: 'myhealthcare_hospitals',
-  seeded: 'myhealthcare_seeded_v1',
+  seeded: 'myhealthcare_seeded_v2',
 };
 
 const DEFAULT_DOCTORS = ['พญ.อัญชิสา'];
@@ -107,7 +107,7 @@ export function initStore(): void {
     if (localStorage.getItem(KEYS.seeded)) return;
 
     if (localStorage.getItem(KEYS.profile) === null) {
-      write<Profile>(KEYS.profile, { full_name: 'คุณสมชาย ใจดี', weight: 68, height: 170 });
+      write<Profile>(KEYS.profile, { full_name: 'คุณ มนตรี ภัทรเดชวงศ์', weight: 82, height: 172 });
     }
     if (localStorage.getItem(KEYS.doctors) === null) {
       write<string[]>(KEYS.doctors, DEFAULT_DOCTORS);
