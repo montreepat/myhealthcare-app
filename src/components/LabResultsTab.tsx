@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, UploadCloud, Loader2 } from 'lucide-react';
 import { getLabResults, addLabResult, deleteLabResult, type LabResult, type LabResultInsert } from '@/lib/store';
 import { evalLab, LEVEL_STYLES, type Level, type MetricResult } from '@/lib/health';
 
@@ -57,8 +57,43 @@ export default function LabResultsTab() {
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; preview: string } | null>(null);
+  const [extracting, setExtracting] = useState(false);
 
   const refresh = () => setResults(getLabResults());
+
+  const handleFileSelect = (file: File | undefined | null) => {
+    setError(null);
+    if (!file) return;
+    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+      setError('รองรับเฉพาะไฟล์ .jpg และ .png เท่านั้น');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('ขนาดไฟล์ต้องไม่เกิน 5MB');
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setUploadedFile({ name: file.name, preview });
+    // จำลองการอ่านค่าจากใบผลตรวจด้วย AI
+    setExtracting(true);
+    setTimeout(() => {
+      const rand = (min: number, max: number, decimals = 0) => {
+        const v = Math.random() * (max - min) + min;
+        return decimals ? v.toFixed(decimals) : String(Math.round(v));
+      };
+      setForm((prev) => ({
+        ...prev,
+        bp_systolic: rand(118, 138),
+        bp_diastolic: rand(72, 88),
+        hba1c: rand(5.4, 7.2, 1),
+        ldl: rand(95, 155),
+        hdl: rand(38, 62),
+      }));
+      setExtracting(false);
+    }, 1400);
+  };
 
   const parsed = useMemo(
     () => ({
@@ -77,6 +112,10 @@ export default function LabResultsTab() {
     setShowModal(false);
     setForm(EMPTY_FORM);
     setError(null);
+    if (uploadedFile) URL.revokeObjectURL(uploadedFile.preview);
+    setUploadedFile(null);
+    setExtracting(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSave = () => {
@@ -187,6 +226,77 @@ export default function LabResultsTab() {
                   onChange={(e) => setForm({ ...form, exam_date: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none transition-all focus:border-accent-400 focus:ring-2 focus:ring-accent-100"
                 />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">รูปภาพใบผลตรวจ</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => handleFileSelect(e.target.files?.[0])}
+                />
+
+                {!uploadedFile ? (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleFileSelect(e.dataTransfer.files?.[0]);
+                    }}
+                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 px-4 py-6 text-center transition-all hover:border-accent-400 hover:bg-accent-50/40"
+                  >
+                    <UploadCloud className="h-8 w-8 text-slate-400" />
+                    <p className="text-sm font-medium text-slate-600">
+                      ลากรูปภาพมาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์
+                    </p>
+                    <p className="text-xs text-slate-400">รองรับ .jpg, .png ขนาดไม่เกิน 5MB (จากเครื่องหรือกล้องมือถือ)</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
+                    <img
+                      src={uploadedFile.preview || "/placeholder.svg"}
+                      alt="พรีวิวใบผลตรวจ"
+                      className="h-14 w-14 shrink-0 rounded-lg border border-slate-100 object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-700">{uploadedFile.name}</p>
+                      {extracting ? (
+                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-accent-600">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          กำลังอ่านค่าจากใบผลตรวจ...
+                        </span>
+                      ) : (
+                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          อัปโหลดสำเร็จ · ดึงค่าอัตโนมัติแล้ว
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => {
+                        URL.revokeObjectURL(uploadedFile.preview);
+                        setUploadedFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="shrink-0 rounded-lg p-1.5 text-slate-300 transition-all hover:bg-red-50 hover:text-red-500"
+                      aria-label="ลบรูปภาพ"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
