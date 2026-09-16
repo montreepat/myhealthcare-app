@@ -25,8 +25,12 @@ export type LabResult = {
   bp_systolic: number | null;
   bp_diastolic: number | null;
   hba1c: number | null;
+  fbs: number | null;
   ldl: number | null;
   hdl: number | null;
+  triglyceride: number | null;
+  egfr: number | null;
+  creatinine: number | null;
   created_at: string;
 };
 
@@ -35,8 +39,12 @@ export type LabResultInsert = {
   bp_systolic?: number | null;
   bp_diastolic?: number | null;
   hba1c?: number | null;
+  fbs?: number | null;
   ldl?: number | null;
   hdl?: number | null;
+  triglyceride?: number | null;
+  egfr?: number | null;
+  creatinine?: number | null;
 };
 
 export type Profile = {
@@ -137,8 +145,12 @@ export function initStore(): void {
           bp_systolic: 120,
           bp_diastolic: 80,
           hba1c: 5.4,
+          fbs: 92,
           ldl: 110,
           hdl: 55,
+          triglyceride: 130,
+          egfr: 95,
+          creatinine: 0.9,
           created_at: new Date().toISOString(),
         },
       ];
@@ -193,8 +205,12 @@ export function addLabResult(data: LabResultInsert): LabResult {
     bp_systolic: data.bp_systolic ?? null,
     bp_diastolic: data.bp_diastolic ?? null,
     hba1c: data.hba1c ?? null,
+    fbs: data.fbs ?? null,
     ldl: data.ldl ?? null,
     hdl: data.hdl ?? null,
+    triglyceride: data.triglyceride ?? null,
+    egfr: data.egfr ?? null,
+    creatinine: data.creatinine ?? null,
     created_at: new Date().toISOString(),
   };
   write(KEYS.labs, [item, ...list]);
