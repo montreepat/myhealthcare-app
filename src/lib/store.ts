@@ -1,5 +1,8 @@
 // Local, browser-based data layer. No external database is required so the
 // preview runs without any Supabase configuration.
+//
+// Data is namespaced per family member so multiple people can each keep their
+// own weight/height/BMI, appointments and lab history independently.
 
 export type Appointment = {
   id: string;
@@ -45,17 +48,38 @@ export type Profile = {
   height: number | null;
 };
 
+// A member of the family. Each has an isolated data namespace plus a stable
+// LINE connection OTP so they can bind their own personal LINE account.
+export type FamilyMember = {
+  id: string;
+  full_name: string;
+  weight: number | null;
+  height: number | null;
+  otp: string;
+};
+
 const KEYS = {
-  appointments: 'myhealthcare_appointments',
-  labs: 'myhealthcare_lab_results',
-  profile: 'myhealthcare_profile',
+  members: 'myhealthcare_members',
+  activeMember: 'myhealthcare_active_member',
   doctors: 'myhealthcare_doctors',
   hospitals: 'myhealthcare_hospitals',
-  seeded: 'myhealthcare_seeded_v2',
+  seeded: 'myhealthcare_seeded_v3',
+  // legacy single-profile keys, migrated into the first member on first run
+  legacyProfile: 'myhealthcare_profile',
+  legacyAppointments: 'myhealthcare_appointments',
+  legacyLabs: 'myhealthcare_lab_results',
 };
 
 const DEFAULT_DOCTORS = ['พญ.อัญชิสา'];
 const DEFAULT_HOSPITALS = ['โรงพยาบาลไทยนครินทร์'];
+
+function appointmentsKey(memberId: string): string {
+  return `myhealthcare_appointments_${memberId}`;
+}
+
+function labsKey(memberId: string): string {
+  return `myhealthcare_lab_results_${memberId}`;
+}
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -81,10 +105,14 @@ function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 /* ---------- Initial seed ---------- */
 // Seeds stable starter data exactly once per browser so the app never opens
-// empty. It only writes keys that have never been set, and records a
-// `seeded` flag so it never overwrites data the user later edits or clears.
+// empty, and migrates any legacy single-profile data into the first family
+// member. It records a `seeded` flag so it never overwrites later edits.
 
 function daysFromNow(days: number): string {
   const d = new Date();
@@ -102,47 +130,66 @@ function isoDaysAgo(days: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+function seedAppointments(): Appointment[] {
+  return [
+    {
+      id: uid(),
+      topic: 'ตรวจสุขภาพประจำปี',
+      doctor_clinic: DEFAULT_DOCTORS[0],
+      appointment_datetime: new Date(daysFromNow(7)).toISOString(),
+      hospital: DEFAULT_HOSPITALS[0],
+      special_instructions: 'งดน้ำงดอาหารก่อนเจาะเลือด 8 ชั่วโมง',
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
+function seedLabs(): LabResult[] {
+  return [
+    {
+      id: uid(),
+      exam_date: isoDaysAgo(30),
+      bp_systolic: 120,
+      bp_diastolic: 80,
+      hba1c: 5.4,
+      ldl: 110,
+      hdl: 55,
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
 export function initStore(): void {
   try {
     if (localStorage.getItem(KEYS.seeded)) return;
 
-    if (localStorage.getItem(KEYS.profile) === null) {
-      write<Profile>(KEYS.profile, { full_name: 'คุณ มนตรี ภัทรเดชวงศ์', weight: 82, height: 172 });
-    }
     if (localStorage.getItem(KEYS.doctors) === null) {
       write<string[]>(KEYS.doctors, DEFAULT_DOCTORS);
     }
     if (localStorage.getItem(KEYS.hospitals) === null) {
       write<string[]>(KEYS.hospitals, DEFAULT_HOSPITALS);
     }
-    if (localStorage.getItem(KEYS.appointments) === null) {
-      const seed: Appointment[] = [
-        {
-          id: uid(),
-          topic: 'ตรวจสุขภาพประจำปี',
-          doctor_clinic: DEFAULT_DOCTORS[0],
-          appointment_datetime: daysFromNow(7),
-          hospital: DEFAULT_HOSPITALS[0],
-          special_instructions: 'งดน้ำงดอาหารก่อนเจาะเลือด 8 ชั่วโมง',
-          created_at: new Date().toISOString(),
-        },
-      ];
-      write<Appointment[]>(KEYS.appointments, seed);
-    }
-    if (localStorage.getItem(KEYS.labs) === null) {
-      const seed: LabResult[] = [
-        {
-          id: uid(),
-          exam_date: isoDaysAgo(30),
-          bp_systolic: 120,
-          bp_diastolic: 80,
-          hba1c: 5.4,
-          ldl: 110,
-          hdl: 55,
-          created_at: new Date().toISOString(),
-        },
-      ];
-      write<LabResult[]>(KEYS.labs, seed);
+
+    if (getMembers().length === 0) {
+      const legacyProfile = read<Profile | null>(KEYS.legacyProfile, null);
+      const defaultMember: FamilyMember = {
+        id: uid(),
+        full_name: legacyProfile?.full_name || 'คุณ มนตรี ภัทรเดชวงศ์',
+        weight: legacyProfile?.weight ?? 82,
+        height: legacyProfile?.height ?? 172,
+        otp: generateOtp(),
+      };
+      write<FamilyMember[]>(KEYS.members, [defaultMember]);
+      write<string>(KEYS.activeMember, defaultMember.id);
+
+      const legacyAppointments = read<Appointment[] | null>(KEYS.legacyAppointments, null);
+      write<Appointment[]>(
+        appointmentsKey(defaultMember.id),
+        legacyAppointments ?? seedAppointments(),
+      );
+
+      const legacyLabs = read<LabResult[] | null>(KEYS.legacyLabs, null);
+      write<LabResult[]>(labsKey(defaultMember.id), legacyLabs ?? seedLabs());
     }
 
     localStorage.setItem(KEYS.seeded, '1');
@@ -151,16 +198,64 @@ export function initStore(): void {
   }
 }
 
-/* ---------- Appointments ---------- */
+/* ---------- Family members ---------- */
+
+export function getMembers(): FamilyMember[] {
+  return read<FamilyMember[]>(KEYS.members, []);
+}
+
+export function getActiveMemberId(): string {
+  const members = getMembers();
+  const stored = read<string | null>(KEYS.activeMember, null);
+  if (stored && members.some((m) => m.id === stored)) return stored;
+  return members[0]?.id ?? '';
+}
+
+export function setActiveMemberId(id: string): void {
+  write<string>(KEYS.activeMember, id);
+}
+
+export function addMember(name: string): FamilyMember {
+  const members = getMembers();
+  const member: FamilyMember = {
+    id: uid(),
+    full_name: name.trim() || 'สมาชิกใหม่',
+    weight: null,
+    height: null,
+    otp: generateOtp(),
+  };
+  write<FamilyMember[]>(KEYS.members, [...members, member]);
+  write<Appointment[]>(appointmentsKey(member.id), []);
+  write<LabResult[]>(labsKey(member.id), []);
+  return member;
+}
+
+export function updateMember(
+  id: string,
+  patch: Partial<Pick<FamilyMember, 'full_name' | 'weight' | 'height'>>,
+): FamilyMember[] {
+  const members = getMembers().map((m) => (m.id === id ? { ...m, ...patch } : m));
+  write<FamilyMember[]>(KEYS.members, members);
+  return members;
+}
+
+export function getActiveOtp(): string {
+  const id = getActiveMemberId();
+  return getMembers().find((m) => m.id === id)?.otp ?? '';
+}
+
+/* ---------- Appointments (per active member) ---------- */
 
 export function getAppointments(): Appointment[] {
-  return read<Appointment[]>(KEYS.appointments, []).sort((a, b) =>
+  const key = appointmentsKey(getActiveMemberId());
+  return read<Appointment[]>(key, []).sort((a, b) =>
     a.appointment_datetime.localeCompare(b.appointment_datetime),
   );
 }
 
 export function addAppointment(data: AppointmentInsert): Appointment {
-  const list = read<Appointment[]>(KEYS.appointments, []);
+  const key = appointmentsKey(getActiveMemberId());
+  const list = read<Appointment[]>(key, []);
   const item: Appointment = {
     id: uid(),
     topic: data.topic,
@@ -170,23 +265,26 @@ export function addAppointment(data: AppointmentInsert): Appointment {
     special_instructions: data.special_instructions ?? null,
     created_at: new Date().toISOString(),
   };
-  write(KEYS.appointments, [...list, item]);
+  write(key, [...list, item]);
   return item;
 }
 
 export function deleteAppointment(id: string): void {
-  const list = read<Appointment[]>(KEYS.appointments, []);
-  write(KEYS.appointments, list.filter((a) => a.id !== id));
+  const key = appointmentsKey(getActiveMemberId());
+  const list = read<Appointment[]>(key, []);
+  write(key, list.filter((a) => a.id !== id));
 }
 
-/* ---------- Lab results ---------- */
+/* ---------- Lab results (per active member) ---------- */
 
 export function getLabResults(): LabResult[] {
-  return read<LabResult[]>(KEYS.labs, []).sort((a, b) => b.exam_date.localeCompare(a.exam_date));
+  const key = labsKey(getActiveMemberId());
+  return read<LabResult[]>(key, []).sort((a, b) => b.exam_date.localeCompare(a.exam_date));
 }
 
 export function addLabResult(data: LabResultInsert): LabResult {
-  const list = read<LabResult[]>(KEYS.labs, []);
+  const key = labsKey(getActiveMemberId());
+  const list = read<LabResult[]>(key, []);
   const item: LabResult = {
     id: uid(),
     exam_date: data.exam_date,
@@ -197,26 +295,34 @@ export function addLabResult(data: LabResultInsert): LabResult {
     hdl: data.hdl ?? null,
     created_at: new Date().toISOString(),
   };
-  write(KEYS.labs, [item, ...list]);
+  write(key, [item, ...list]);
   return item;
 }
 
 export function deleteLabResult(id: string): void {
-  const list = read<LabResult[]>(KEYS.labs, []);
-  write(KEYS.labs, list.filter((r) => r.id !== id));
+  const key = labsKey(getActiveMemberId());
+  const list = read<LabResult[]>(key, []);
+  write(key, list.filter((r) => r.id !== id));
 }
 
-/* ---------- Profile ---------- */
+/* ---------- Profile (maps to the active member) ---------- */
 
 export function getProfile(): Profile {
-  return read<Profile>(KEYS.profile, { full_name: '', weight: null, height: null });
+  const id = getActiveMemberId();
+  const member = getMembers().find((m) => m.id === id);
+  if (!member) return { full_name: '', weight: null, height: null };
+  return { full_name: member.full_name, weight: member.weight, height: member.height };
 }
 
 export function saveProfile(profile: Profile): void {
-  write(KEYS.profile, profile);
+  updateMember(getActiveMemberId(), {
+    full_name: profile.full_name,
+    weight: profile.weight,
+    height: profile.height,
+  });
 }
 
-/* ---------- Doctor & hospital options ---------- */
+/* ---------- Doctor & hospital options (shared across members) ---------- */
 
 export function getDoctors(): string[] {
   return read<string[]>(KEYS.doctors, DEFAULT_DOCTORS);

@@ -5,7 +5,9 @@ import LabResultsTab from '@/components/LabResultsTab';
 import LineTab from '@/components/LineTab';
 import ProfileTab from '@/components/ProfileTab';
 import LoginScreen from '@/components/LoginScreen';
-import { useSession } from '@/hooks/useSession';
+import ProfileSwitcher from '@/components/ProfileSwitcher';
+import { useSession, type SessionState } from '@/hooks/useSession';
+import { ProfilesProvider, useProfiles } from '@/hooks/useProfiles';
 
 type Tab = 'profile' | 'appointments' | 'lab' | 'line';
 
@@ -25,13 +27,6 @@ function getTabFromUrl(): Tab {
 
 function App() {
   const { session, loading, login, logout } = useSession();
-  const [activeTab, setActiveTab] = useState<Tab>('appointments');
-
-  useEffect(() => {
-    if (session.loggedIn) {
-      setActiveTab(getTabFromUrl());
-    }
-  }, [session.loggedIn]);
 
   if (loading) {
     return (
@@ -44,6 +39,17 @@ function App() {
   if (!session.loggedIn) {
     return <LoginScreen onLogin={login} />;
   }
+
+  return (
+    <ProfilesProvider>
+      <Dashboard session={session} logout={logout} />
+    </ProfilesProvider>
+  );
+}
+
+function Dashboard({ session, logout }: { session: SessionState; logout: () => void }) {
+  const { activeId } = useProfiles();
+  const [activeTab, setActiveTab] = useState<Tab>(getTabFromUrl);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -60,7 +66,8 @@ function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1">
+              <ProfileSwitcher />
+              <div className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 sm:flex">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -97,7 +104,7 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-5 pb-24">
+      <main key={activeId} className="mx-auto max-w-2xl px-4 py-5 pb-24">
         {activeTab === 'profile' && <ProfileTab />}
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'lab' && <LabResultsTab />}

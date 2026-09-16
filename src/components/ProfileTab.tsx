@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { User, Scale, Ruler, CheckCircle2, Activity } from 'lucide-react';
 import { getProfile, saveProfile } from '@/lib/store';
+import { useProfiles } from '@/hooks/useProfiles';
 import { calcBmi, getBmiCategory, bmiToPercent } from '@/lib/health';
 
 const SEGMENTS = [
@@ -17,6 +18,7 @@ function numOrNull(v: string): number | null {
 }
 
 export default function ProfileTab() {
+  const { updateActiveProfile } = useProfiles();
   const initial = getProfile();
   const [fullName, setFullName] = useState(initial.full_name);
   const [weight, setWeight] = useState(initial.weight !== null ? String(initial.weight) : '');
@@ -31,7 +33,9 @@ export default function ProfileTab() {
   const percent = bmiToPercent(bmi);
 
   const handleSave = () => {
-    saveProfile({ full_name: fullName.trim(), weight: weightNum, height: heightNum });
+    const profile = { full_name: fullName.trim(), weight: weightNum, height: heightNum };
+    saveProfile(profile);
+    updateActiveProfile(profile);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
