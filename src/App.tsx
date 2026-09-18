@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Calendar, FlaskConical, Bell, Heart, LogOut, UserCircle } from 'lucide-react';
+import { Calendar, FlaskConical, Bell, Heart, LogOut, UserCircle, Activity } from 'lucide-react';
 import AppointmentsTab from '@/components/AppointmentsTab';
 import LabResultsTab from '@/components/LabResultsTab';
+import BloodPressureTab from '@/components/BloodPressureTab';
 import LineTab from '@/components/LineTab';
 import ProfileTab from '@/components/ProfileTab';
 import LoginScreen from '@/components/LoginScreen';
@@ -9,19 +10,20 @@ import ProfileSwitcher from '@/components/ProfileSwitcher';
 import { useSession, type SessionState } from '@/hooks/useSession';
 import { ProfilesProvider, useProfiles } from '@/hooks/useProfiles';
 
-type Tab = 'profile' | 'appointments' | 'lab' | 'line';
+type Tab = 'profile' | 'appointments' | 'lab' | 'bp' | 'line';
 
 const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
   { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: UserCircle },
   { id: 'appointments', label: 'ตารางนัดหมาย', icon: Calendar },
   { id: 'lab', label: 'ผลแลป & สุขภาพ', icon: FlaskConical },
+  { id: 'bp', label: 'บันทึกความดัน', icon: Activity },
   { id: 'line', label: 'แจ้งเตือน LINE', icon: Bell },
 ];
 
 function getTabFromUrl(): Tab {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'profile' || tab === 'lab' || tab === 'line') return tab;
+  if (tab === 'profile' || tab === 'lab' || tab === 'bp' || tab === 'line') return tab;
   return 'appointments';
 }
 
@@ -108,6 +110,7 @@ function Dashboard({ session, logout }: { session: SessionState; logout: () => v
         {activeTab === 'profile' && <ProfileTab />}
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'lab' && <LabResultsTab />}
+        {activeTab === 'bp' && <BloodPressureTab />}
         {activeTab === 'line' && <LineTab />}
       </main>
 

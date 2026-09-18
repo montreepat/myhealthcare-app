@@ -46,6 +46,67 @@ export function bmiToPercent(bmi: number | null): number {
   return Math.max(0, Math.min(100, pct));
 }
 
+/* ---------- Blood pressure logging ---------- */
+
+export type BpLevel = 'normal' | 'elevated' | 'stage1' | 'stage2';
+
+export type BpAssessment = {
+  level: BpLevel;
+  label: string;
+  bar: string; // tailwind bg color for the status bar / dot
+  bg: string;
+  text: string;
+  ring: string;
+  advice: string;
+};
+
+// Categorises a blood-pressure reading using the ACC/AHA thresholds.
+// Order matters: the highest-severity band that matches wins.
+export function assessBloodPressure(sys: number, dia: number): BpAssessment {
+  if (sys >= 140 || dia >= 90) {
+    return {
+      level: 'stage2',
+      label: 'ความดันสูงระดับ 2',
+      bar: 'bg-red-500',
+      bg: 'bg-red-50',
+      text: 'text-red-600',
+      ring: 'border-red-200',
+      advice: 'ความดันโลหิตสูงระดับ 2 ควรนั่งพักแล้ววัดซ้ำ หากยังสูงควรรีบปรึกษาแพทย์',
+    };
+  }
+  if (sys >= 130 || dia >= 80) {
+    return {
+      level: 'stage1',
+      label: 'ความดันสูงระดับ 1',
+      bar: 'bg-orange-500',
+      bg: 'bg-orange-50',
+      text: 'text-orange-600',
+      ring: 'border-orange-200',
+      advice: 'ความดันสูงระดับ 1 ควรลดเค็ม ออกกำลังกาย และติดตามค่าอย่างสม่ำเสมอ',
+    };
+  }
+  if (sys >= 120) {
+    return {
+      level: 'elevated',
+      label: 'ความดันเริ่มสูง',
+      bar: 'bg-amber-400',
+      bg: 'bg-amber-50',
+      text: 'text-amber-600',
+      ring: 'border-amber-200',
+      advice: 'ความดันเริ่มสูง ควรปรับพฤติกรรมการกินและพักผ่อนให้เพียงพอ',
+    };
+  }
+  return {
+    level: 'normal',
+    label: 'ปกติ',
+    bar: 'bg-emerald-500',
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-600',
+    ring: 'border-emerald-200',
+    advice: 'ความดันโลหิตอยู่ในเกณฑ์ปกติ รักษาพฤติกรรมสุขภาพที่ดีต่อไป',
+  };
+}
+
 /* ---------- Lab metrics ---------- */
 
 export type MetricResult = {

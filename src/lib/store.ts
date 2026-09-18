@@ -42,6 +42,28 @@ export type LabResultInsert = {
   hdl?: number | null;
 };
 
+export type BpPeriod = 'morning' | 'evening';
+
+export type BpLog = {
+  id: string;
+  measured_at: string; // ISO datetime
+  period: BpPeriod;
+  systolic: number;
+  diastolic: number;
+  pulse: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type BpLogInsert = {
+  measured_at: string;
+  period: BpPeriod;
+  systolic: number;
+  diastolic: number;
+  pulse?: number | null;
+  note?: string | null;
+};
+
 export type Profile = {
   full_name: string;
   weight: number | null;
@@ -79,6 +101,10 @@ function appointmentsKey(memberId: string): string {
 
 function labsKey(memberId: string): string {
   return `myhealthcare_lab_results_${memberId}`;
+}
+
+function bpLogsKey(memberId: string): string {
+  return `myhealthcare_bp_logs_${memberId}`;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -227,6 +253,7 @@ export function addMember(name: string): FamilyMember {
   write<FamilyMember[]>(KEYS.members, [...members, member]);
   write<Appointment[]>(appointmentsKey(member.id), []);
   write<LabResult[]>(labsKey(member.id), []);
+  write<BpLog[]>(bpLogsKey(member.id), []);
   return member;
 }
 
@@ -302,6 +329,36 @@ export function addLabResult(data: LabResultInsert): LabResult {
 export function deleteLabResult(id: string): void {
   const key = labsKey(getActiveMemberId());
   const list = read<LabResult[]>(key, []);
+  write(key, list.filter((r) => r.id !== id));
+}
+
+/* ---------- Blood pressure logs (per active member) ---------- */
+
+export function getBpLogs(): BpLog[] {
+  const key = bpLogsKey(getActiveMemberId());
+  return read<BpLog[]>(key, []).sort((a, b) => b.measured_at.localeCompare(a.measured_at));
+}
+
+export function addBpLog(data: BpLogInsert): BpLog {
+  const key = bpLogsKey(getActiveMemberId());
+  const list = read<BpLog[]>(key, []);
+  const item: BpLog = {
+    id: uid(),
+    measured_at: data.measured_at,
+    period: data.period,
+    systolic: data.systolic,
+    diastolic: data.diastolic,
+    pulse: data.pulse ?? null,
+    note: data.note ?? null,
+    created_at: new Date().toISOString(),
+  };
+  write(key, [item, ...list]);
+  return item;
+}
+
+export function deleteBpLog(id: string): void {
+  const key = bpLogsKey(getActiveMemberId());
+  const list = read<BpLog[]>(key, []);
   write(key, list.filter((r) => r.id !== id));
 }
 
