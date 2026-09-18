@@ -148,3 +148,62 @@ export function evalLab(data: {
     evalHdl(data.hdl),
   ].filter((m): m is MetricResult => m !== null);
 }
+
+/* ---------- Blood pressure log assessment (4-stage) ---------- */
+
+export type BpAssessmentLevel = 'normal' | 'elevated' | 'stage1' | 'stage2';
+
+export type BpAssessment = {
+  level: BpAssessmentLevel;
+  label: string;
+  barColor: string;
+  textColor: string;
+  bgColor: string;
+  borderColor: string;
+  advice: string;
+};
+
+export function assessBp(sys: number, dia: number): BpAssessment {
+  if (sys >= 140 || dia >= 90) {
+    return {
+      level: 'stage2',
+      label: 'ความดันสูงระดับ 2',
+      barColor: 'bg-red-500',
+      textColor: 'text-red-600',
+      bgColor: 'bg-red-50',
+      borderColor: 'border-red-200',
+      advice: 'ความดันโลหิตสูงมาก เสี่ยงต่อภาวะแทรกซ้อน ควรพบแพทย์โดยเร็วและติดตามอย่างใกล้ชิด',
+    };
+  }
+  if (sys >= 130 || dia >= 80) {
+    return {
+      level: 'stage1',
+      label: 'ความดันสูงระดับ 1',
+      barColor: 'bg-orange-500',
+      textColor: 'text-orange-600',
+      bgColor: 'bg-orange-50',
+      borderColor: 'border-orange-200',
+      advice: 'ความดันเริ่มสูง ควรลดเค็ม ควบคุมอาหาร ออกกำลังกายสม่ำเสมอ และวัดซ้ำเป็นระยะ',
+    };
+  }
+  if (sys >= 120) {
+    return {
+      level: 'elevated',
+      label: 'ความดันเริ่มสูง',
+      barColor: 'bg-amber-500',
+      textColor: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+      borderColor: 'border-amber-200',
+      advice: 'ความดันเริ่มเพิ่ม ควรดูแลไลฟ์สไตล์ ลดเค็ม พักผ่อนให้เพียงพอ และติดตามต่อเนื่อง',
+    };
+  }
+  return {
+    level: 'normal',
+    label: 'ปกติ',
+    barColor: 'bg-emerald-500',
+    textColor: 'text-emerald-600',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
+    advice: 'ความดันโลหิตอยู่ในเกณฑ์ปกติ รักษาพฤติกรรมสุขภาพที่ดีต่อไป',
+  };
+}

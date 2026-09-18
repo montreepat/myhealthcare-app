@@ -42,6 +42,26 @@ export type LabResultInsert = {
   hdl?: number | null;
 };
 
+export type BloodPressureLog = {
+  id: string;
+  logged_at: string;
+  period: 'morning' | 'evening';
+  systolic: number;
+  diastolic: number;
+  pulse: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type BloodPressureLogInsert = {
+  logged_at: string;
+  period: 'morning' | 'evening';
+  systolic: number;
+  diastolic: number;
+  pulse?: number | null;
+  note?: string | null;
+};
+
 export type Profile = {
   full_name: string;
   weight: number | null;
@@ -79,6 +99,10 @@ function appointmentsKey(memberId: string): string {
 
 function labsKey(memberId: string): string {
   return `myhealthcare_lab_results_${memberId}`;
+}
+
+function bpLogsKey(memberId: string): string {
+  return `myhealthcare_bp_logs_${memberId}`;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -159,6 +183,23 @@ function seedLabs(): LabResult[] {
   ];
 }
 
+function seedBpLogs(): BloodPressureLog[] {
+  const now = new Date().toISOString();
+  const daysAgoAt = (days: number, hour: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    d.setHours(hour, 0, 0, 0);
+    return d.toISOString();
+  };
+  return [
+    { id: uid(), logged_at: daysAgoAt(1, 7), period: 'morning', systolic: 125, diastolic: 78, pulse: 72, note: 'หลังตื่นนอน', created_at: now },
+    { id: uid(), logged_at: daysAgoAt(1, 19), period: 'evening', systolic: 132, diastolic: 85, pulse: 75, note: 'ก่อนนอน', created_at: now },
+    { id: uid(), logged_at: daysAgoAt(2, 8), period: 'morning', systolic: 128, diastolic: 82, pulse: 70, note: null, created_at: now },
+    { id: uid(), logged_at: daysAgoAt(3, 7), period: 'morning', systolic: 118, diastolic: 76, pulse: 68, note: 'พักผ่อนเพียงพอ', created_at: now },
+    { id: uid(), logged_at: daysAgoAt(5, 20), period: 'evening', systolic: 136, diastolic: 88, pulse: 78, note: 'เครียดจากงาน', created_at: now },
+  ];
+}
+
 export function initStore(): void {
   try {
     if (localStorage.getItem(KEYS.seeded)) return;
@@ -190,6 +231,8 @@ export function initStore(): void {
 
       const legacyLabs = read<LabResult[] | null>(KEYS.legacyLabs, null);
       write<LabResult[]>(labsKey(defaultMember.id), legacyLabs ?? seedLabs());
+
+      write<BloodPressureLog[]>(bpLogsKey(defaultMember.id), seedBpLogs());
     }
 
     localStorage.setItem(KEYS.seeded, '1');
@@ -227,6 +270,7 @@ export function addMember(name: string): FamilyMember {
   write<FamilyMember[]>(KEYS.members, [...members, member]);
   write<Appointment[]>(appointmentsKey(member.id), []);
   write<LabResult[]>(labsKey(member.id), []);
+  write<BloodPressureLog[]>(bpLogsKey(member.id), []);
   return member;
 }
 
@@ -303,6 +347,38 @@ export function deleteLabResult(id: string): void {
   const key = labsKey(getActiveMemberId());
   const list = read<LabResult[]>(key, []);
   write(key, list.filter((r) => r.id !== id));
+}
+
+/* ---------- Blood pressure logs (per active member) ---------- */
+
+export function getBpLogs(): BloodPressureLog[] {
+  const key = bpLogsKey(getActiveMemberId());
+  return read<BloodPressureLog[]>(key, []).sort((a, b) =>
+    b.logged_at.localeCompare(a.logged_at),
+  );
+}
+
+export function addBpLog(data: BloodPressureLogInsert): BloodPressureLog {
+  const key = bpLogsKey(getActiveMemberId());
+  const list = read<BloodPressureLog[]>(key, []);
+  const item: BloodPressureLog = {
+    id: uid(),
+    logged_at: data.logged_at,
+    period: data.period,
+    systolic: data.systolic,
+    diastolic: data.diastolic,
+    pulse: data.pulse ?? null,
+    note: data.note ?? null,
+    created_at: new Date().toISOString(),
+  };
+  write(key, [item, ...list]);
+  return item;
+}
+
+export function deleteBpLog(id: string): void {
+  const key = bpLogsKey(getActiveMemberId());
+  const list = read<BloodPressureLog[]>(key, []);
+  write(key, list.filter((l) => l.id !== id));
 }
 
 /* ---------- Profile (maps to the active member) ---------- */
