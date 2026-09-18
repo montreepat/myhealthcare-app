@@ -1,0 +1,60 @@
+{
+  "name": "MyHealthCare - แอปดูแลสุขภาพ",
+  "short_name": "MyHealthCare",
+  "description": "แอปดูแลสุขภาพส่วนบุคคล จัดการนัดหมาย ผลแลป และแจ้งเตือน LINE",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#059669",
+  "lang": "th",
+  "dir": "ltr",
+  "categories": ["health", "medical", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "ตารางนัดหมาย",
+      "short_name": "นัดหมาย",
+      "url": "/?tab=appointments",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "ผลแลป & สุขภาพ",
+      "short_name": "ผลแลป",
+      "url": "/?tab=lab",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "แจ้งเตือน LINE",
+      "short_name": "LINE",
+      "url": "/?tab=line",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
