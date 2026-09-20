@@ -68,6 +68,34 @@ export type Profile = {
   height: number | null;
 };
 
+export type Medication = {
+  id: string;
+  name: string;
+  strength: string;
+  dose: string;
+  schedule: string;
+  meal_timing: 'before' | 'after' | 'with' | 'any';
+  start_date: string;
+  end_date: string | null;
+  prescriber: string | null;
+  hospital: string | null;
+  purpose: string | null;
+  note: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type MedicationInsert = Omit<Medication, 'id' | 'created_at'>;
+
+export type MedicationLog = {
+  id: string;
+  medication_id: string;
+  scheduled_at: string;
+  status: 'taken' | 'skipped' | 'missed';
+  note: string | null;
+  created_at: string;
+};
+
 // A member of the family. Each has an isolated data namespace plus a stable
 // LINE connection OTP so they can bind their own personal LINE account.
 export type FamilyMember = {
@@ -103,6 +131,14 @@ function labsKey(memberId: string): string {
 
 function bpLogsKey(memberId: string): string {
   return `myhealthcare_bp_logs_${memberId}`;
+}
+
+function medicationsKey(memberId: string): string {
+  return `myhealthcare_medications_${memberId}`;
+}
+
+function medicationLogsKey(memberId: string): string {
+  return `myhealthcare_medication_logs_${memberId}`;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -271,7 +307,88 @@ export function addMember(name: string): FamilyMember {
   write<Appointment[]>(appointmentsKey(member.id), []);
   write<LabResult[]>(labsKey(member.id), []);
   write<BloodPressureLog[]>(bpLogsKey(member.id), []);
+  write<Medication[]>(medicationsKey(member.id), []);
+  write<MedicationLog[]>(medicationLogsKey(member.id), []);
   return member;
+}
+
+/* ---------- Medications (per active member) ---------- */
+
+export function getMedications(): Medication[] {
+  return read<Medication[]>(medicationsKey(getActiveMemberId()), []).sort((a, b) =>
+    Number(b.active) - Number(a.active) || b.created_at.localeCompare(a.created_at),
+  );
+}
+
+export function addMedication(data: MedicationInsert): Medication {
+  const key = medicationsKey(getActiveMemberId());
+  const list = read<Medication[]>(key, []);
+  const item: Medication = { ...data, id: uid(), created_at: new Date().toISOString() };
+  write(key, [item, ...list]);
+  return item;
+}
+
+export function updateMedication(id: string, patch: Partial<MedicationInsert>): void {
+  const key = medicationsKey(getActiveMemberId());
+  const list = read<Medication[]>(key, []);
+  write(key, list.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+}
+
+export function deleteMedication(id: string): void {
+  const key = medicationsKey(getActiveMemberId());
+  write(key, read<Medication[]>(key, []).filter((item) => item.id !== id));
+}
+
+export function getMedicationLogs(): MedicationLog[] {
+  return read<MedicationLog[]>(medicationLogsKey(getActiveMemberId()), []).sort((a, b) =>
+    b.scheduled_at.localeCompare(a.scheduled_at),
+  );
+}
+
+export function addMedicationLog(
+  medicationId: string,
+  status: MedicationLog['status'],
+  scheduledAt = new Date().toISOString(),
+  note: string | null = null,
+): MedicationLog {
+  const key = medicationLogsKey(getActiveMemberId());
+  const list = read<MedicationLog[]>(key, []);
+  const item: MedicationLog = {
+    id: uid(), medication_id: medicationId, scheduled_at: scheduledAt,
+    status, note, created_at: new Date().toISOString(),
+  };
+  write(key, [item, ...list]);
+  return item;
+}
+
+/* ---------- Backup / restore ---------- */
+
+export type StoreBackup = {
+  format: 'myhealthcare-backup';
+  version: 1;
+  exported_at: string;
+  data: Record<string, unknown>;
+};
+
+export function createBackup(): StoreBackup {
+  const data: Record<string, unknown> = {};
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith('myhealthcare_')) continue;
+    const raw = localStorage.getItem(key);
+    if (raw === null) continue;
+    try { data[key] = JSON.parse(raw); } catch { data[key] = raw; }
+  }
+  return { format: 'myhealthcare-backup', version: 1, exported_at: new Date().toISOString(), data };
+}
+
+export function restoreBackup(backup: StoreBackup): void {
+  if (backup.format !== 'myhealthcare-backup' || backup.version !== 1 || !backup.data) {
+    throw new Error('ไฟล์สำรองไม่ถูกต้อง');
+  }
+  Object.entries(backup.data).forEach(([key, value]) => {
+    if (key.startsWith('myhealthcare_')) localStorage.setItem(key, JSON.stringify(value));
+  });
 }
 
 export function updateMember(

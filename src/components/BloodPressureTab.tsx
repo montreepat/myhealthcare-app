@@ -23,12 +23,6 @@ function formatDateTimeThai(iso: string): { date: string; time: string; day: str
   };
 }
 
-function nowLocalDatetime(): string {
-  const d = new Date();
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 type FormState = {
   logged_at: string;
   period: 'morning' | 'evening';
@@ -112,7 +106,7 @@ const BloodPressureTab = () => {
         systolic: sysNum,
         diastolic: diaNum,
         pulse: payload.pulse ?? null,
-        note: payload.note,
+        note: payload.note ?? null,
         assessmentLabel: assessment.label,
         advice: assessment.advice,
       });

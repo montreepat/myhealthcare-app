@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, UploadCloud, Loader2 } from 'lucide-react';
+import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, UploadCloud } from 'lucide-react';
 import { getLabResults, addLabResult, deleteLabResult, type LabResult, type LabResultInsert } from '@/lib/store';
 import { evalLab, LEVEL_STYLES, type Level, type MetricResult } from '@/lib/health';
 
@@ -59,7 +59,6 @@ export default function LabResultsTab() {
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; preview: string } | null>(null);
-  const [extracting, setExtracting] = useState(false);
 
   const refresh = () => setResults(getLabResults());
 
@@ -76,23 +75,6 @@ export default function LabResultsTab() {
     }
     const preview = URL.createObjectURL(file);
     setUploadedFile({ name: file.name, preview });
-    // จำลองการอ่านค่าจากใบผลตรวจด้วย AI
-    setExtracting(true);
-    setTimeout(() => {
-      const rand = (min: number, max: number, decimals = 0) => {
-        const v = Math.random() * (max - min) + min;
-        return decimals ? v.toFixed(decimals) : String(Math.round(v));
-      };
-      setForm((prev) => ({
-        ...prev,
-        bp_systolic: rand(118, 138),
-        bp_diastolic: rand(72, 88),
-        hba1c: rand(5.4, 7.2, 1),
-        ldl: rand(95, 155),
-        hdl: rand(38, 62),
-      }));
-      setExtracting(false);
-    }, 1400);
   };
 
   const parsed = useMemo(
@@ -114,7 +96,6 @@ export default function LabResultsTab() {
     setError(null);
     if (uploadedFile) URL.revokeObjectURL(uploadedFile.preview);
     setUploadedFile(null);
-    setExtracting(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -272,17 +253,10 @@ export default function LabResultsTab() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-slate-700">{uploadedFile.name}</p>
-                      {extracting ? (
-                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-accent-600">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          กำลังอ่านค่าจากใบผลตรวจ...
-                        </span>
-                      ) : (
-                        <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-green-600">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          อัปโหลดสำเร็จ · ดึงค่าอัตโนมัติแล้ว
-                        </span>
-                      )}
+                      <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        เลือกรูปแล้ว · กรุณาตรวจและกรอกค่าตามใบผลตรวจ
+                      </span>
                     </div>
                     <button
                       onClick={() => {

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Calendar, FlaskConical, Bell, Heart, HeartPulse, LogOut, CircleUser as UserCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Calendar, FlaskConical, Bell, Heart, HeartPulse, LogOut, CircleUser as UserCircle, Pill } from 'lucide-react';
 import AppointmentsTab from '@/components/AppointmentsTab';
 import BloodPressureTab from '@/components/BloodPressureTab';
 import LabResultsTab from '@/components/LabResultsTab';
@@ -7,15 +7,17 @@ import LineTab from '@/components/LineTab';
 import ProfileTab from '@/components/ProfileTab';
 import LoginScreen from '@/components/LoginScreen';
 import ProfileSwitcher from '@/components/ProfileSwitcher';
+import MedicationsTab from '@/components/MedicationsTab';
 import { useSession, type SessionState } from '@/hooks/useSession';
 import { ProfilesProvider, useProfiles } from '@/hooks/useProfiles';
 
-type Tab = 'profile' | 'appointments' | 'lab' | 'bp' | 'line';
+type Tab = 'profile' | 'appointments' | 'lab' | 'medications' | 'bp' | 'line';
 
 const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
   { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: UserCircle },
   { id: 'appointments', label: 'ตารางนัดหมาย', icon: Calendar },
   { id: 'lab', label: 'ผลแลป & สุขภาพ', icon: FlaskConical },
+  { id: 'medications', label: 'ยา', icon: Pill },
   { id: 'bp', label: 'ความดัน', icon: HeartPulse },
   { id: 'line', label: 'แจ้งเตือน LINE', icon: Bell },
 ];
@@ -23,7 +25,7 @@ const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
 function getTabFromUrl(): Tab {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'profile' || tab === 'lab' || tab === 'bp' || tab === 'line') return tab;
+  if (tab === 'profile' || tab === 'lab' || tab === 'medications' || tab === 'bp' || tab === 'line') return tab;
   return 'appointments';
 }
 
@@ -85,14 +87,14 @@ function Dashboard({ session, logout }: { session: SessionState; logout: () => v
               </button>
             </div>
           </div>
-          <nav className="flex gap-1">
+          <nav className="flex gap-1 overflow-x-auto">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2.5 text-sm font-medium transition-all ${
+                  className={`flex min-w-[6rem] flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-2.5 text-sm font-medium transition-all ${
                     isActive ? 'tab-active' : 'tab-inactive'
                   }`}
                 >
@@ -110,6 +112,7 @@ function Dashboard({ session, logout }: { session: SessionState; logout: () => v
         {activeTab === 'profile' && <ProfileTab />}
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'lab' && <LabResultsTab />}
+        {activeTab === 'medications' && <MedicationsTab />}
         {activeTab === 'bp' && <BloodPressureTab />}
         {activeTab === 'line' && <LineTab />}
       </main>

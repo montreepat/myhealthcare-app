@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { User, Scale, Ruler, CheckCircle2, Activity } from 'lucide-react';
-import { getProfile, saveProfile } from '@/lib/store';
+import { useRef } from 'react';
+import { User, Scale, Ruler, CheckCircle2, Activity, Download, Upload } from 'lucide-react';
+import { createBackup, getProfile, restoreBackup, saveProfile, type StoreBackup } from '@/lib/store';
 import { useProfiles } from '@/hooks/useProfiles';
 import { calcBmi, getBmiCategory, bmiToPercent } from '@/lib/health';
 
@@ -24,6 +25,7 @@ export default function ProfileTab() {
   const [weight, setWeight] = useState(initial.weight !== null ? String(initial.weight) : '');
   const [height, setHeight] = useState(initial.height !== null ? String(initial.height) : '');
   const [saved, setSaved] = useState(false);
+  const backupInput = useRef<HTMLInputElement>(null);
 
   const weightNum = numOrNull(weight);
   const heightNum = numOrNull(height);
@@ -38,6 +40,31 @@ export default function ProfileTab() {
     updateActiveProfile(profile);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const downloadBackup = () => {
+    const blob = new Blob([JSON.stringify(createBackup(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `myhealthcare-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackup = async (file?: File) => {
+    if (!file) return;
+    try {
+      const backup = JSON.parse(await file.text()) as StoreBackup;
+      if (!window.confirm('นำเข้าข้อมูลจากไฟล์นี้และแทนที่ข้อมูลที่ชื่อซ้ำหรือไม่?')) return;
+      restoreBackup(backup);
+      window.alert('นำเข้าข้อมูลสำเร็จ ระบบจะโหลดหน้าใหม่');
+      window.location.reload();
+    } catch {
+      window.alert('ไม่สามารถอ่านไฟล์สำรองนี้ได้');
+    } finally {
+      if (backupInput.current) backupInput.current.value = '';
+    }
   };
 
   return (
@@ -104,6 +131,16 @@ export default function ProfileTab() {
               'บันทึกข้อมูลส่วนตัว'
             )}
           </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <h3 className="font-semibold text-slate-800">สำรองข้อมูลเครื่องนี้</h3>
+        <p className="mt-1 text-sm text-slate-500">ดาวน์โหลดข้อมูลเดิมเก็บไว้ก่อนย้ายเข้าสู่ฐานข้อมูลออนไลน์</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button onClick={downloadBackup} className="flex items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white"><Download className="h-4 w-4" /> ดาวน์โหลดไฟล์สำรอง</button>
+          <button onClick={() => backupInput.current?.click()} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700"><Upload className="h-4 w-4" /> นำเข้าข้อมูลสำรอง</button>
+          <input ref={backupInput} type="file" accept="application/json,.json" className="hidden" onChange={(e) => void importBackup(e.target.files?.[0])} />
         </div>
       </div>
 
