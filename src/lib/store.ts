@@ -304,9 +304,37 @@ export function getMembers(): FamilyMember[] {
 
 export function replaceMembersFromOnline(items: Array<Omit<FamilyMember, 'otp'>>): FamilyMember[] {
   const current = getMembers();
+  // When an existing browser is connected to Supabase for the first time, the
+  // online profile gets a database-generated id.  Preserve the browser's
+  // per-profile data by moving it from the matching legacy member id before
+  // replacing the member list.
+  for (const item of items) {
+    if (current.some((member) => member.id === item.id)) continue;
+    const legacy = current.find(
+      (member) => member.full_name.trim() === item.full_name.trim(),
+    );
+    if (!legacy || legacy.id === item.id) continue;
+
+    const migrateIfTargetEmpty = <T>(oldKey: string, newKey: string) => {
+      const target = read<T[]>(newKey, []);
+      if (target.length === 0) {
+        const source = read<T[]>(oldKey, []);
+        if (source.length > 0) write<T[]>(newKey, source);
+      }
+    };
+
+    migrateIfTargetEmpty<Appointment>(appointmentsKey(legacy.id), appointmentsKey(item.id));
+    migrateIfTargetEmpty<LabResult>(labsKey(legacy.id), labsKey(item.id));
+    migrateIfTargetEmpty<BloodPressureLog>(bpLogsKey(legacy.id), bpLogsKey(item.id));
+    migrateIfTargetEmpty<Medication>(medicationsKey(legacy.id), medicationsKey(item.id));
+    migrateIfTargetEmpty<MedicationLog>(medicationLogsKey(legacy.id), medicationLogsKey(item.id));
+    migrateIfTargetEmpty<ActivityLog>(activityLogsKey(legacy.id), activityLogsKey(item.id));
+  }
   const members = items.map((item) => ({
     ...item,
-    otp: current.find((member) => member.id === item.id)?.otp ?? generateOtp(),
+    otp: current.find(
+      (member) => member.id === item.id || member.full_name.trim() === item.full_name.trim(),
+    )?.otp ?? generateOtp(),
   }));
   write<FamilyMember[]>(KEYS.members, members);
   const active = getActiveMemberId();
