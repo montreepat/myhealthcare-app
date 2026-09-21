@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
-import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, Images, Camera } from 'lucide-react';
-import { getLabResults, addLabResult, deleteLabResult, type LabResult, type LabResultInsert } from '@/lib/store';
+import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, Images, Camera, Image as ImageIcon } from 'lucide-react';
+import { getLabResults, addLabResult, deleteLabResult, getLabImageUrl, type LabResult, type LabResultInsert } from '@/lib/store';
 import { evalLab, LEVEL_STYLES, type Level, type MetricResult } from '@/lib/health';
 
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
@@ -56,10 +56,11 @@ export default function LabResultsTab() {
   const [results, setResults] = useState<LabResult[]>(() => getLabResults());
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; preview: string } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; preview: string; file: File } | null>(null);
 
   const refresh = () => setResults(getLabResults());
 
@@ -80,7 +81,7 @@ export default function LabResultsTab() {
         setError('ไม่สามารถเปิดรูปภาพนี้ได้ กรุณาลองเลือกรูปอื่น');
         return;
       }
-      setUploadedFile({ name: file.name || 'รูปใบผลตรวจ', preview: reader.result });
+      setUploadedFile({ name: file.name || 'รูปใบผลตรวจ', preview: reader.result, file });
     };
     reader.onerror = () => setError('อ่านรูปภาพไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
     reader.readAsDataURL(file);
@@ -108,18 +109,35 @@ export default function LabResultsTab() {
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const hasAny =
       parsed.hba1c !== null || parsed.ldl !== null || parsed.hdl !== null ||
       (parsed.bp_systolic !== null && parsed.bp_diastolic !== null);
-    if (!form.exam_date || !hasAny) {
-      setError('กรุณากรอกวันที่ตรวจ และค่าผลแลปอย่างน้อยหนึ่งรายการ');
+    if (!form.exam_date || (!hasAny && !uploadedFile)) {
+      setError('กรุณากรอกวันที่ตรวจ แล้วแนบรูปหรือกรอกค่าผลตรวจอย่างน้อยหนึ่งรายการ');
       return;
     }
     const payload: LabResultInsert = { exam_date: form.exam_date, ...parsed };
-    addLabResult(payload);
-    closeModal();
-    refresh();
+    setSaving(true);
+    try {
+      await addLabResult(payload, uploadedFile?.file);
+      closeModal();
+      refresh();
+    } catch (err) {
+      setError(err instanceof Error ? `บันทึกรูปไม่สำเร็จ: ${err.message}` : 'บันทึกรูปไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openLabImage = async (lab: LabResult) => {
+    if (!lab.storage_path) return;
+    const url = await getLabImageUrl(lab.storage_path);
+    if (!url) {
+      setError('เปิดรูปใบผลตรวจไม่สำเร็จ กรุณาลองใหม่');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const handleDelete = (id: string) => {
@@ -184,6 +202,15 @@ export default function LabResultsTab() {
                       <MetricCard key={m.key} metric={m} />
                     ))}
                   </div>
+                  {lab.storage_path && (
+                    <button
+                      onClick={() => void openLabImage(lab)}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-accent-200 bg-accent-50 px-4 py-2.5 text-sm font-semibold text-accent-700"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                      ดูรูปใบผลตรวจ
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -377,9 +404,10 @@ export default function LabResultsTab() {
                 </button>
                 <button
                   onClick={handleSave}
+                  disabled={saving}
                   className="flex-1 rounded-xl bg-accent-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-accent-700 hover:shadow-md active:scale-95"
                 >
-                  บันทึกผลแลป
+                  {saving ? 'กำลังบันทึกรูป...' : 'บันทึกผลแลป'}
                 </button>
               </div>
             </div>
