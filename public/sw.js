@@ -1,4 +1,4 @@
-const CACHE_NAME = 'myhealthcare-v1';
+const CACHE_NAME = 'myhealthcare-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -43,16 +43,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Prefer the network while online so phones receive newly deployed JS/CSS.
+  // Cached files remain available only as an offline fallback.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
-      return fetch(req).then((res) => {
+    fetch(req)
+      .then((res) => {
         if (res.ok && res.type === 'basic') {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((c) => c.put(req, copy));
         }
         return res;
-      });
-    })
+      })
+      .catch(() => caches.match(req))
   );
 });
