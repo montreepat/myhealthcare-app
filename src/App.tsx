@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Calendar, FlaskConical, Bell, Heart, HeartPulse, LogOut, CircleUser as UserCircle, Pill } from 'lucide-react';
+import { Calendar, FlaskConical, Bell, Heart, HeartPulse, LogOut, CircleUser as UserCircle, Pill, Footprints } from 'lucide-react';
 import AppointmentsTab from '@/components/AppointmentsTab';
 import BloodPressureTab from '@/components/BloodPressureTab';
 import LabResultsTab from '@/components/LabResultsTab';
@@ -8,16 +8,18 @@ import ProfileTab from '@/components/ProfileTab';
 import LoginScreen from '@/components/LoginScreen';
 import ProfileSwitcher from '@/components/ProfileSwitcher';
 import MedicationsTab from '@/components/MedicationsTab';
+import ActivityTab from '@/components/ActivityTab';
 import { useSession, type SessionState } from '@/hooks/useSession';
 import { ProfilesProvider, useProfiles } from '@/hooks/useProfiles';
 
-type Tab = 'profile' | 'appointments' | 'lab' | 'medications' | 'bp' | 'line';
+type Tab = 'profile' | 'appointments' | 'lab' | 'medications' | 'activity' | 'bp' | 'line';
 
 const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
   { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: UserCircle },
   { id: 'appointments', label: 'ตารางนัดหมาย', icon: Calendar },
   { id: 'lab', label: 'ผลแลป & สุขภาพ', icon: FlaskConical },
   { id: 'medications', label: 'ยา', icon: Pill },
+  { id: 'activity', label: 'กิจกรรม', icon: Footprints },
   { id: 'bp', label: 'ความดัน', icon: HeartPulse },
   { id: 'line', label: 'แจ้งเตือน LINE', icon: Bell },
 ];
@@ -25,12 +27,12 @@ const TABS: { id: Tab; label: string; icon: typeof Calendar }[] = [
 function getTabFromUrl(): Tab {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'profile' || tab === 'lab' || tab === 'medications' || tab === 'bp' || tab === 'line') return tab;
+  if (tab === 'profile' || tab === 'lab' || tab === 'medications' || tab === 'activity' || tab === 'bp' || tab === 'line') return tab;
   return 'appointments';
 }
 
 function App() {
-  const { session, loading, login, logout } = useSession();
+  const { session, loading, login, register, logout } = useSession();
 
   if (loading) {
     return (
@@ -41,7 +43,7 @@ function App() {
   }
 
   if (!session.loggedIn) {
-    return <LoginScreen onLogin={login} />;
+    return <LoginScreen onLogin={login} onRegister={register} />;
   }
 
   return (
@@ -51,7 +53,7 @@ function App() {
   );
 }
 
-function Dashboard({ session, logout }: { session: SessionState; logout: () => void }) {
+function Dashboard({ session, logout }: { session: SessionState; logout: () => Promise<void> }) {
   const { activeId } = useProfiles();
   const [activeTab, setActiveTab] = useState<Tab>(getTabFromUrl);
 
@@ -79,7 +81,7 @@ function Dashboard({ session, logout }: { session: SessionState; logout: () => v
                 <span className="text-xs font-medium text-emerald-600">เชื่อมต่อแล้ว</span>
               </div>
               <button
-                onClick={logout}
+                onClick={() => void logout()}
                 className="rounded-lg p-1.5 text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600"
                 title="ออกจากระบบ"
               >
@@ -113,6 +115,7 @@ function Dashboard({ session, logout }: { session: SessionState; logout: () => v
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'lab' && <LabResultsTab />}
         {activeTab === 'medications' && <MedicationsTab />}
+        {activeTab === 'activity' && <ActivityTab />}
         {activeTab === 'bp' && <BloodPressureTab />}
         {activeTab === 'line' && <LineTab />}
       </main>

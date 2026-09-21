@@ -1,68 +1,40 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
-const STORAGE_KEY = 'myhealthcare_session';
-
-export type SessionState = {
-  loggedIn: boolean;
-  name: string;
-  lastActive: number;
-};
-
-const DEFAULT_SESSION: SessionState = {
-  loggedIn: false,
-  name: '',
-  lastActive: 0,
-};
-
-const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
-
-function readSession(): SessionState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SESSION;
-    const parsed = JSON.parse(raw) as SessionState;
-    if (Date.now() - parsed.lastActive > SESSION_TTL) {
-      localStorage.removeItem(STORAGE_KEY);
-      return DEFAULT_SESSION;
-    }
-    return parsed;
-  } catch {
-    return DEFAULT_SESSION;
-  }
-}
-
-function writeSession(s: SessionState) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-  } catch {
-    // ignore quota errors
-  }
-}
+export type SessionState = { loggedIn: boolean; name: string; email: string };
+const EMPTY: SessionState = { loggedIn: false, name: '', email: '' };
 
 export function useSession() {
-  const [session, setSession] = useState<SessionState>(DEFAULT_SESSION);
+  const [session, setSession] = useState<SessionState>(EMPTY);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = readSession();
-    if (stored.loggedIn) {
-      const refreshed = { ...stored, lastActive: Date.now() };
-      writeSession(refreshed);
-      setSession(refreshed);
-    }
-    setLoading(false);
+    if (!supabase) { setLoading(false); return; }
+    void supabase.auth.getSession().then(({ data }) => {
+      const user = data.session?.user;
+      setSession(user ? { loggedIn: true, name: String(user.user_metadata.full_name || user.email || 'ผู้ใช้งาน'), email: user.email || '' } : EMPTY);
+      setLoading(false);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, value) => {
+      const user = value?.user;
+      setSession(user ? { loggedIn: true, name: String(user.user_metadata.full_name || user.email || 'ผู้ใช้งาน'), email: user.email || '' } : EMPTY);
+    });
+    return () => data.subscription.unsubscribe();
   }, []);
 
-  const login = useCallback((name: string) => {
-    const s: SessionState = { loggedIn: true, name, lastActive: Date.now() };
-    writeSession(s);
-    setSession(s);
+  const login = useCallback(async (email: string, password: string) => {
+    if (!supabase) throw new Error('ยังไม่ได้ตั้งค่าการเชื่อมต่อ Supabase');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setSession(DEFAULT_SESSION);
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    if (!supabase) throw new Error('ยังไม่ได้ตั้งค่าการเชื่อมต่อ Supabase');
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+    if (error) throw error;
+    return { needsConfirmation: !data.session };
   }, []);
 
-  return { session, loading, login, logout };
+  const logout = useCallback(async () => { if (supabase) await supabase.auth.signOut(); setSession(EMPTY); }, []);
+  return { session, loading, login, register, logout };
 }

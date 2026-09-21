@@ -1,4 +1,6 @@
-// Local, browser-based data layer. No external database is required so the
+import { supabase } from '@/lib/supabase';
+
+// Local cache with optional Supabase synchronization.
 // preview runs without any Supabase configuration.
 //
 // Data is namespaced per family member so multiple people can each keep their
@@ -96,6 +98,19 @@ export type MedicationLog = {
   created_at: string;
 };
 
+export type ActivityLog = {
+  id: string;
+  activity_date: string;
+  activity_type: 'walking' | 'running' | 'other';
+  steps: number;
+  distance_km: number | null;
+  duration_minutes: number | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type ActivityLogInsert = Omit<ActivityLog, 'id' | 'created_at'>;
+
 // A member of the family. Each has an isolated data namespace plus a stable
 // LINE connection OTP so they can bind their own personal LINE account.
 export type FamilyMember = {
@@ -139,6 +154,10 @@ function medicationsKey(memberId: string): string {
 
 function medicationLogsKey(memberId: string): string {
   return `myhealthcare_medication_logs_${memberId}`;
+}
+
+function activityLogsKey(memberId: string): string {
+  return `myhealthcare_activity_logs_${memberId}`;
 }
 
 function read<T>(key: string, fallback: T): T {
@@ -283,6 +302,18 @@ export function getMembers(): FamilyMember[] {
   return read<FamilyMember[]>(KEYS.members, []);
 }
 
+export function replaceMembersFromOnline(items: Array<Omit<FamilyMember, 'otp'>>): FamilyMember[] {
+  const current = getMembers();
+  const members = items.map((item) => ({
+    ...item,
+    otp: current.find((member) => member.id === item.id)?.otp ?? generateOtp(),
+  }));
+  write<FamilyMember[]>(KEYS.members, members);
+  const active = getActiveMemberId();
+  if (!members.some((member) => member.id === active) && members[0]) write(KEYS.activeMember, members[0].id);
+  return members;
+}
+
 export function getActiveMemberId(): string {
   const members = getMembers();
   const stored = read<string | null>(KEYS.activeMember, null);
@@ -309,7 +340,37 @@ export function addMember(name: string): FamilyMember {
   write<BloodPressureLog[]>(bpLogsKey(member.id), []);
   write<Medication[]>(medicationsKey(member.id), []);
   write<MedicationLog[]>(medicationLogsKey(member.id), []);
+  write<ActivityLog[]>(activityLogsKey(member.id), []);
+  const client = supabase;
+  if (client) void client.auth.getUser().then(async ({ data }) => {
+    if (!data.user) return;
+    const household = await client.from('households').select('id').eq('owner_user_id', data.user.id).maybeSingle();
+    if (household.data) await client.from('family_profiles').insert({ id: member.id, household_id: household.data.id, full_name: member.full_name, role: 'member' });
+  });
   return member;
+}
+
+/* ---------- Walking / running activity (per active member) ---------- */
+
+export function getActivityLogs(): ActivityLog[] {
+  return read<ActivityLog[]>(activityLogsKey(getActiveMemberId()), []).sort((a, b) =>
+    b.activity_date.localeCompare(a.activity_date) || b.created_at.localeCompare(a.created_at),
+  );
+}
+
+export function addActivityLog(data: ActivityLogInsert): ActivityLog {
+  const key = activityLogsKey(getActiveMemberId());
+  const list = read<ActivityLog[]>(key, []);
+  const item: ActivityLog = { ...data, id: uid(), created_at: new Date().toISOString() };
+  write(key, [item, ...list]);
+  if (supabase) void supabase.from('activity_logs').insert({ ...item, profile_id: getActiveMemberId() });
+  return item;
+}
+
+export function deleteActivityLog(id: string): void {
+  const key = activityLogsKey(getActiveMemberId());
+  write(key, read<ActivityLog[]>(key, []).filter((item) => item.id !== id));
+  if (supabase) void supabase.from('activity_logs').delete().eq('id', id);
 }
 
 /* ---------- Medications (per active member) ---------- */
@@ -325,6 +386,7 @@ export function addMedication(data: MedicationInsert): Medication {
   const list = read<Medication[]>(key, []);
   const item: Medication = { ...data, id: uid(), created_at: new Date().toISOString() };
   write(key, [item, ...list]);
+  if (supabase) void supabase.from('medications').insert({ ...item, profile_id: getActiveMemberId() });
   return item;
 }
 
@@ -332,11 +394,13 @@ export function updateMedication(id: string, patch: Partial<MedicationInsert>): 
   const key = medicationsKey(getActiveMemberId());
   const list = read<Medication[]>(key, []);
   write(key, list.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  if (supabase) void supabase.from('medications').update(patch).eq('id', id);
 }
 
 export function deleteMedication(id: string): void {
   const key = medicationsKey(getActiveMemberId());
   write(key, read<Medication[]>(key, []).filter((item) => item.id !== id));
+  if (supabase) void supabase.from('medications').delete().eq('id', id);
 }
 
 export function getMedicationLogs(): MedicationLog[] {
@@ -358,6 +422,7 @@ export function addMedicationLog(
     status, note, created_at: new Date().toISOString(),
   };
   write(key, [item, ...list]);
+  if (supabase) void supabase.from('medication_logs').insert(item);
   return item;
 }
 
@@ -397,6 +462,7 @@ export function updateMember(
 ): FamilyMember[] {
   const members = getMembers().map((m) => (m.id === id ? { ...m, ...patch } : m));
   write<FamilyMember[]>(KEYS.members, members);
+  if (supabase) void supabase.from('family_profiles').update(patch).eq('id', id);
   return members;
 }
 
@@ -427,6 +493,7 @@ export function addAppointment(data: AppointmentInsert): Appointment {
     created_at: new Date().toISOString(),
   };
   write(key, [...list, item]);
+  if (supabase) void supabase.from('health_appointments').insert({ ...item, profile_id: getActiveMemberId() });
   return item;
 }
 
@@ -434,6 +501,7 @@ export function deleteAppointment(id: string): void {
   const key = appointmentsKey(getActiveMemberId());
   const list = read<Appointment[]>(key, []);
   write(key, list.filter((a) => a.id !== id));
+  if (supabase) void supabase.from('health_appointments').delete().eq('id', id);
 }
 
 /* ---------- Lab results (per active member) ---------- */
@@ -489,6 +557,7 @@ export function addBpLog(data: BloodPressureLogInsert): BloodPressureLog {
     created_at: new Date().toISOString(),
   };
   write(key, [item, ...list]);
+  if (supabase) void supabase.from('blood_pressure_logs').insert({ ...item, profile_id: getActiveMemberId() });
   return item;
 }
 
@@ -496,6 +565,40 @@ export function deleteBpLog(id: string): void {
   const key = bpLogsKey(getActiveMemberId());
   const list = read<BloodPressureLog[]>(key, []);
   write(key, list.filter((l) => l.id !== id));
+  if (supabase) void supabase.from('blood_pressure_logs').delete().eq('id', id);
+}
+
+export async function syncProfileWithOnline(profileId: string): Promise<void> {
+  if (!supabase || !profileId) return;
+  const appointments = read<Appointment[]>(appointmentsKey(profileId), []);
+  const medications = read<Medication[]>(medicationsKey(profileId), []);
+  const medicationLogs = read<MedicationLog[]>(medicationLogsKey(profileId), []);
+  const bpLogs = read<BloodPressureLog[]>(bpLogsKey(profileId), []);
+  const activityLogs = read<ActivityLog[]>(activityLogsKey(profileId), []);
+
+  if (appointments.length) await supabase.from('health_appointments').upsert(appointments.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+  if (medications.length) await supabase.from('medications').upsert(medications.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+  if (medicationLogs.length) await supabase.from('medication_logs').upsert(medicationLogs, { onConflict: 'id' });
+  if (bpLogs.length) await supabase.from('blood_pressure_logs').upsert(bpLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+  if (activityLogs.length) await supabase.from('activity_logs').upsert(activityLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+
+  const [a, m, b, act] = await Promise.all([
+    supabase.from('health_appointments').select('id,topic,doctor_clinic,appointment_datetime,hospital,special_instructions,created_at').eq('profile_id', profileId),
+    supabase.from('medications').select('id,name,strength,dose,schedule,meal_timing,start_date,end_date,prescriber,hospital,purpose,note,active,created_at').eq('profile_id', profileId),
+    supabase.from('blood_pressure_logs').select('id,logged_at,period,systolic,diastolic,pulse,note,created_at').eq('profile_id', profileId),
+    supabase.from('activity_logs').select('id,activity_date,activity_type,steps,distance_km,duration_minutes,note,created_at').eq('profile_id', profileId),
+  ]);
+  if (!a.error) write(appointmentsKey(profileId), a.data as Appointment[]);
+  if (!m.error) {
+    write(medicationsKey(profileId), m.data as Medication[]);
+    const ids = m.data.map((item) => item.id);
+    if (ids.length) {
+      const ml = await supabase.from('medication_logs').select('id,medication_id,scheduled_at,status,note,created_at').in('medication_id', ids);
+      if (!ml.error) write(medicationLogsKey(profileId), ml.data as MedicationLog[]);
+    }
+  }
+  if (!b.error) write(bpLogsKey(profileId), b.data as BloodPressureLog[]);
+  if (!act.error) write(activityLogsKey(profileId), act.data as ActivityLog[]);
 }
 
 /* ---------- Profile (maps to the active member) ---------- */
