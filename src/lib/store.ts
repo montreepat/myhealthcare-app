@@ -561,6 +561,23 @@ export async function addLabResult(data: LabResultInsert, imageFile?: File | nul
   };
 
   if (supabase) {
+    const sessionResult = await supabase.auth.getUser();
+    if (sessionResult.error || !sessionResult.data.user) {
+      throw new Error('เซสชันหมดอายุ กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่');
+    }
+
+    const profileCheck = await supabase
+      .from('family_profiles')
+      .select('id')
+      .eq('id', profileId)
+      .maybeSingle();
+    if (profileCheck.error) {
+      throw new Error(`ตรวจสอบสิทธิ์โปรไฟล์ไม่สำเร็จ: ${profileCheck.error.message}`);
+    }
+    if (!profileCheck.data) {
+      throw new Error('ไม่พบสิทธิ์ของโปรไฟล์นี้ในบัญชีออนไลน์');
+    }
+
     if (imageFile) {
       const extension = (imageFile.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
       const storagePath = `${profileId}/${item.id}.${extension}`;
@@ -568,7 +585,7 @@ export async function addLabResult(data: LabResultInsert, imageFile?: File | nul
         contentType: imageFile.type || 'image/jpeg',
         upsert: false,
       });
-      if (upload.error) throw upload.error;
+      if (upload.error) throw new Error(`อัปโหลดรูปไม่สำเร็จ: ${upload.error.message}`);
       item.storage_path = storagePath;
     }
 
@@ -578,7 +595,7 @@ export async function addLabResult(data: LabResultInsert, imageFile?: File | nul
     });
     if (online.error) {
       if (item.storage_path) await supabase.storage.from('health-documents').remove([item.storage_path]);
-      throw online.error;
+      throw new Error(`บันทึกข้อมูลผลแลปไม่สำเร็จ: ${online.error.message}`);
     }
   }
   write(key, [item, ...list]);
