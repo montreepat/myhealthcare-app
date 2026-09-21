@@ -570,30 +570,49 @@ export function deleteBpLog(id: string): void {
 
 export async function syncProfileWithOnline(profileId: string): Promise<void> {
   if (!supabase || !profileId) return;
-  const appointments = read<Appointment[]>(appointmentsKey(profileId), []);
-  const medications = read<Medication[]>(medicationsKey(profileId), []);
-  const medicationLogs = read<MedicationLog[]>(medicationLogsKey(profileId), []);
-  const bpLogs = read<BloodPressureLog[]>(bpLogsKey(profileId), []);
-  const activityLogs = read<ActivityLog[]>(activityLogsKey(profileId), []);
+  const localAppointments = read<Appointment[]>(appointmentsKey(profileId), []);
+  const localMedications = read<Medication[]>(medicationsKey(profileId), []);
+  const localMedicationLogs = read<MedicationLog[]>(medicationLogsKey(profileId), []);
+  const localBpLogs = read<BloodPressureLog[]>(bpLogsKey(profileId), []);
+  const localActivityLogs = read<ActivityLog[]>(activityLogsKey(profileId), []);
 
-  if (appointments.length) await supabase.from('health_appointments').upsert(appointments.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
-  if (medications.length) await supabase.from('medications').upsert(medications.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
-  if (medicationLogs.length) await supabase.from('medication_logs').upsert(medicationLogs, { onConflict: 'id' });
-  if (bpLogs.length) await supabase.from('blood_pressure_logs').upsert(bpLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
-  if (activityLogs.length) await supabase.from('activity_logs').upsert(activityLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
-
-  const [a, m, b, act] = await Promise.all([
+  // Supabase is the source of truth across devices. Local data is uploaded only
+  // for the one-time migration case where the corresponding online table is
+  // still empty. This prevents stale browser data from overwriting newer data.
+  let [a, m, b, act] = await Promise.all([
     supabase.from('health_appointments').select('id,topic,doctor_clinic,appointment_datetime,hospital,special_instructions,created_at').eq('profile_id', profileId),
     supabase.from('medications').select('id,name,strength,dose,schedule,meal_timing,start_date,end_date,prescriber,hospital,purpose,note,active,created_at').eq('profile_id', profileId),
     supabase.from('blood_pressure_logs').select('id,logged_at,period,systolic,diastolic,pulse,note,created_at').eq('profile_id', profileId),
     supabase.from('activity_logs').select('id,activity_date,activity_type,steps,distance_km,duration_minutes,note,created_at').eq('profile_id', profileId),
   ]);
+
+  if (!a.error && a.data.length === 0 && localAppointments.length) {
+    await supabase.from('health_appointments').upsert(localAppointments.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+    a = await supabase.from('health_appointments').select('id,topic,doctor_clinic,appointment_datetime,hospital,special_instructions,created_at').eq('profile_id', profileId);
+  }
+  if (!m.error && m.data.length === 0 && localMedications.length) {
+    await supabase.from('medications').upsert(localMedications.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+    m = await supabase.from('medications').select('id,name,strength,dose,schedule,meal_timing,start_date,end_date,prescriber,hospital,purpose,note,active,created_at').eq('profile_id', profileId);
+  }
+  if (!b.error && b.data.length === 0 && localBpLogs.length) {
+    await supabase.from('blood_pressure_logs').upsert(localBpLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+    b = await supabase.from('blood_pressure_logs').select('id,logged_at,period,systolic,diastolic,pulse,note,created_at').eq('profile_id', profileId);
+  }
+  if (!act.error && act.data.length === 0 && localActivityLogs.length) {
+    await supabase.from('activity_logs').upsert(localActivityLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
+    act = await supabase.from('activity_logs').select('id,activity_date,activity_type,steps,distance_km,duration_minutes,note,created_at').eq('profile_id', profileId);
+  }
+
   if (!a.error) write(appointmentsKey(profileId), a.data as Appointment[]);
   if (!m.error) {
     write(medicationsKey(profileId), m.data as Medication[]);
     const ids = m.data.map((item) => item.id);
     if (ids.length) {
-      const ml = await supabase.from('medication_logs').select('id,medication_id,scheduled_at,status,note,created_at').in('medication_id', ids);
+      let ml = await supabase.from('medication_logs').select('id,medication_id,scheduled_at,status,note,created_at').in('medication_id', ids);
+      if (!ml.error && ml.data.length === 0 && localMedicationLogs.length) {
+        await supabase.from('medication_logs').upsert(localMedicationLogs, { onConflict: 'id' });
+        ml = await supabase.from('medication_logs').select('id,medication_id,scheduled_at,status,note,created_at').in('medication_id', ids);
+      }
       if (!ml.error) write(medicationLogsKey(profileId), ml.data as MedicationLog[]);
     }
   }
