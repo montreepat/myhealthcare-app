@@ -297,7 +297,7 @@ export default function LabResultsTab() {
                       <p className="truncate text-sm font-medium text-slate-700">{uploadedFile.name}</p>
                       <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-amber-600">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        เลือกรูปแล้ว · กรุณาตรวจและกรอกค่าตามใบผลตรวจ
+                        เลือกรูปแล้ว · บันทึกรูปอย่างเดียวได้ ไม่ต้องกรอกค่าที่ไม่ทราบ
                       </span>
                     </div>
                     <button
