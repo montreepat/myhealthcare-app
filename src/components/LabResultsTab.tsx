@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, UploadCloud } from 'lucide-react';
+import { FlaskConical, Plus, X, FileText, AlertCircle, Trash2, CheckCircle2, AlertTriangle, HeartPulse, Images, Camera } from 'lucide-react';
 import { getLabResults, addLabResult, deleteLabResult, type LabResult, type LabResultInsert } from '@/lib/store';
 import { evalLab, LEVEL_STYLES, type Level, type MetricResult } from '@/lib/health';
 
@@ -57,7 +57,8 @@ export default function LabResultsTab() {
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; preview: string } | null>(null);
 
   const refresh = () => setResults(getLabResults());
@@ -65,16 +66,24 @@ export default function LabResultsTab() {
   const handleFileSelect = (file: File | undefined | null) => {
     setError(null);
     if (!file) return;
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      setError('รองรับเฉพาะไฟล์ .jpg และ .png เท่านั้น');
+    if (!file.type.startsWith('image/')) {
+      setError('กรุณาเลือกไฟล์รูปภาพเท่านั้น');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError('ขนาดไฟล์ต้องไม่เกิน 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('ขนาดรูปภาพต้องไม่เกิน 10MB');
       return;
     }
-    const preview = URL.createObjectURL(file);
-    setUploadedFile({ name: file.name, preview });
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        setError('ไม่สามารถเปิดรูปภาพนี้ได้ กรุณาลองเลือกรูปอื่น');
+        return;
+      }
+      setUploadedFile({ name: file.name || 'รูปใบผลตรวจ', preview: reader.result });
+    };
+    reader.onerror = () => setError('อ่านรูปภาพไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    reader.readAsDataURL(file);
   };
 
   const parsed = useMemo(
@@ -94,9 +103,9 @@ export default function LabResultsTab() {
     setShowModal(false);
     setForm(EMPTY_FORM);
     setError(null);
-    if (uploadedFile) URL.revokeObjectURL(uploadedFile.preview);
     setUploadedFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
   const handleSave = () => {
@@ -212,9 +221,18 @@ export default function LabResultsTab() {
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">รูปภาพใบผลตรวจ</label>
                 <input
-                  ref={fileInputRef}
+                  id="lab-gallery-input"
+                  ref={galleryInputRef}
                   type="file"
-                  accept="image/jpeg,image/png"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleFileSelect(e.target.files?.[0])}
+                />
+                <input
+                  id="lab-camera-input"
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
                   capture="environment"
                   className="hidden"
                   onChange={(e) => handleFileSelect(e.target.files?.[0])}
@@ -222,27 +240,24 @@ export default function LabResultsTab() {
 
                 {!uploadedFile ? (
                   <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => fileInputRef.current?.click()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        fileInputRef.current?.click();
-                      }
-                    }}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
                       handleFileSelect(e.dataTransfer.files?.[0]);
                     }}
-                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 px-4 py-6 text-center transition-all hover:border-accent-400 hover:bg-accent-50/40"
+                    className="rounded-xl border-2 border-dashed border-slate-300 bg-slate-50/50 p-4"
                   >
-                    <UploadCloud className="h-8 w-8 text-slate-400" />
-                    <p className="text-sm font-medium text-slate-600">
-                      ลากรูปภาพมาวางที่นี่ หรือ คลิกเพื่อเลือกไฟล์
-                    </p>
-                    <p className="text-xs text-slate-400">รองรับ .jpg, .png ขนาดไม่เกิน 5MB (จากเครื่องหรือกล้องมือถือ)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label htmlFor="lab-gallery-input" className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm active:bg-slate-50">
+                        <Images className="h-7 w-7 text-accent-600" />
+                        <span className="text-sm font-semibold text-slate-700">เลือกจากคลังภาพ</span>
+                      </label>
+                      <label htmlFor="lab-camera-input" className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-4 text-center shadow-sm active:bg-slate-50">
+                        <Camera className="h-7 w-7 text-accent-600" />
+                        <span className="text-sm font-semibold text-slate-700">ถ่ายรูปใหม่</span>
+                      </label>
+                    </div>
+                    <p className="mt-3 text-center text-xs text-slate-400">รองรับรูปภาพจากมือถือ ขนาดไม่เกิน 10MB</p>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3">
@@ -260,9 +275,9 @@ export default function LabResultsTab() {
                     </div>
                     <button
                       onClick={() => {
-                        URL.revokeObjectURL(uploadedFile.preview);
                         setUploadedFile(null);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
+                        if (galleryInputRef.current) galleryInputRef.current.value = '';
+                        if (cameraInputRef.current) cameraInputRef.current.value = '';
                       }}
                       className="shrink-0 rounded-lg p-1.5 text-slate-300 transition-all hover:bg-red-50 hover:text-red-500"
                       aria-label="ลบรูปภาพ"
