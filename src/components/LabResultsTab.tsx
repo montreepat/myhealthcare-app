@@ -124,7 +124,13 @@ export default function LabResultsTab() {
       closeModal();
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? `บันทึกรูปไม่สำเร็จ: ${err.message}` : 'บันทึกรูปไม่สำเร็จ กรุณาลองใหม่');
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === 'object' && err !== null && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : String(err || 'ไม่ทราบสาเหตุ');
+      setError(message);
     } finally {
       setSaving(false);
     }
