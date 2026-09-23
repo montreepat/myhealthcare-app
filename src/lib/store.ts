@@ -32,8 +32,6 @@ export type LabResult = {
   hba1c: number | null;
   ldl: number | null;
   hdl: number | null;
-  storage_path: string | null;
-  original_file_name: string | null;
   created_at: string;
 };
 
@@ -235,8 +233,6 @@ function seedLabs(): LabResult[] {
       hba1c: 5.4,
       ldl: 110,
       hdl: 55,
-      storage_path: null,
-      original_file_name: null,
       created_at: new Date().toISOString(),
     },
   ];
@@ -543,10 +539,9 @@ export function getLabResults(): LabResult[] {
   return read<LabResult[]>(key, []).sort((a, b) => b.exam_date.localeCompare(a.exam_date));
 }
 
-export async function addLabResult(data: LabResultInsert, imageFile?: File | null): Promise<LabResult> {
+export function addLabResult(data: LabResultInsert): LabResult {
   const key = labsKey(getActiveMemberId());
   const list = read<LabResult[]>(key, []);
-  const profileId = getActiveMemberId();
   const item: LabResult = {
     id: uid(),
     exam_date: data.exam_date,
@@ -555,49 +550,8 @@ export async function addLabResult(data: LabResultInsert, imageFile?: File | nul
     hba1c: data.hba1c ?? null,
     ldl: data.ldl ?? null,
     hdl: data.hdl ?? null,
-    storage_path: null,
-    original_file_name: imageFile?.name ?? null,
     created_at: new Date().toISOString(),
   };
-
-  if (supabase) {
-    const sessionResult = await supabase.auth.getUser();
-    if (sessionResult.error || !sessionResult.data.user) {
-      throw new Error('เซสชันหมดอายุ กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่');
-    }
-
-    const profileCheck = await supabase
-      .from('family_profiles')
-      .select('id')
-      .eq('id', profileId)
-      .maybeSingle();
-    if (profileCheck.error) {
-      throw new Error(`ตรวจสอบสิทธิ์โปรไฟล์ไม่สำเร็จ: ${profileCheck.error.message}`);
-    }
-    if (!profileCheck.data) {
-      throw new Error('ไม่พบสิทธิ์ของโปรไฟล์นี้ในบัญชีออนไลน์');
-    }
-
-    if (imageFile) {
-      const extension = (imageFile.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
-      const storagePath = `${profileId}/${item.id}.${extension}`;
-      const upload = await supabase.storage.from('health-documents').upload(storagePath, imageFile, {
-        contentType: imageFile.type || 'image/jpeg',
-        upsert: false,
-      });
-      if (upload.error) throw new Error(`อัปโหลดรูปไม่สำเร็จ: ${upload.error.message}`);
-      item.storage_path = storagePath;
-    }
-
-    const online = await supabase.from('lab_results').insert({
-      ...item,
-      profile_id: profileId,
-    });
-    if (online.error) {
-      if (item.storage_path) await supabase.storage.from('health-documents').remove([item.storage_path]);
-      throw new Error(`บันทึกข้อมูลผลแลปไม่สำเร็จ: ${online.error.message}`);
-    }
-  }
   write(key, [item, ...list]);
   return item;
 }
@@ -605,18 +559,7 @@ export async function addLabResult(data: LabResultInsert, imageFile?: File | nul
 export function deleteLabResult(id: string): void {
   const key = labsKey(getActiveMemberId());
   const list = read<LabResult[]>(key, []);
-  const target = list.find((r) => r.id === id);
   write(key, list.filter((r) => r.id !== id));
-  if (supabase) {
-    void supabase.from('lab_results').delete().eq('id', id);
-    if (target?.storage_path) void supabase.storage.from('health-documents').remove([target.storage_path]);
-  }
-}
-
-export async function getLabImageUrl(storagePath: string): Promise<string | null> {
-  if (!supabase) return null;
-  const result = await supabase.storage.from('health-documents').createSignedUrl(storagePath, 60 * 60);
-  return result.error ? null : result.data.signedUrl;
 }
 
 /* ---------- Blood pressure logs (per active member) ---------- */
@@ -660,17 +603,15 @@ export async function syncProfileWithOnline(profileId: string): Promise<void> {
   const localMedicationLogs = read<MedicationLog[]>(medicationLogsKey(profileId), []);
   const localBpLogs = read<BloodPressureLog[]>(bpLogsKey(profileId), []);
   const localActivityLogs = read<ActivityLog[]>(activityLogsKey(profileId), []);
-  const localLabs = read<LabResult[]>(labsKey(profileId), []);
 
   // Supabase is the source of truth across devices. Local data is uploaded only
   // for the one-time migration case where the corresponding online table is
   // still empty. This prevents stale browser data from overwriting newer data.
-  let [a, m, b, act, labs] = await Promise.all([
+  let [a, m, b, act] = await Promise.all([
     supabase.from('health_appointments').select('id,topic,doctor_clinic,appointment_datetime,hospital,special_instructions,created_at').eq('profile_id', profileId),
     supabase.from('medications').select('id,name,strength,dose,schedule,meal_timing,start_date,end_date,prescriber,hospital,purpose,note,active,created_at').eq('profile_id', profileId),
     supabase.from('blood_pressure_logs').select('id,logged_at,period,systolic,diastolic,pulse,note,created_at').eq('profile_id', profileId),
     supabase.from('activity_logs').select('id,activity_date,activity_type,steps,distance_km,duration_minutes,note,created_at').eq('profile_id', profileId),
-    supabase.from('lab_results').select('id,exam_date,bp_systolic,bp_diastolic,hba1c,ldl,hdl,storage_path,original_file_name,created_at').eq('profile_id', profileId),
   ]);
 
   if (!a.error && a.data.length === 0 && localAppointments.length) {
@@ -689,15 +630,6 @@ export async function syncProfileWithOnline(profileId: string): Promise<void> {
     await supabase.from('activity_logs').upsert(localActivityLogs.map((x) => ({ ...x, profile_id: profileId })), { onConflict: 'id' });
     act = await supabase.from('activity_logs').select('id,activity_date,activity_type,steps,distance_km,duration_minutes,note,created_at').eq('profile_id', profileId);
   }
-  if (!labs.error && labs.data.length === 0 && localLabs.length) {
-    await supabase.from('lab_results').upsert(localLabs.map((x) => ({
-      ...x,
-      storage_path: x.storage_path ?? null,
-      original_file_name: x.original_file_name ?? null,
-      profile_id: profileId,
-    })), { onConflict: 'id' });
-    labs = await supabase.from('lab_results').select('id,exam_date,bp_systolic,bp_diastolic,hba1c,ldl,hdl,storage_path,original_file_name,created_at').eq('profile_id', profileId);
-  }
 
   if (!a.error) write(appointmentsKey(profileId), a.data as Appointment[]);
   if (!m.error) {
@@ -714,7 +646,6 @@ export async function syncProfileWithOnline(profileId: string): Promise<void> {
   }
   if (!b.error) write(bpLogsKey(profileId), b.data as BloodPressureLog[]);
   if (!act.error) write(activityLogsKey(profileId), act.data as ActivityLog[]);
-  if (!labs.error) write(labsKey(profileId), labs.data as LabResult[]);
 }
 
 /* ---------- Profile (maps to the active member) ---------- */
