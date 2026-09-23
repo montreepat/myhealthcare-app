@@ -561,13 +561,7 @@ export function deleteLabResult(id: string): void {
   const list = read<LabResult[]>(key, []);
   write(key, list.filter((r) => r.id !== id));
 }
-export async function getLabImageUrl(storagePath: string): Promise<string | null> {
-  if (!supabase) return null;
-  const result = await supabase.storage
-    .from('health-documents')
-    .createSignedUrl(storagePath, 60 * 60);
-  return result.error ? null : result.data.signedUrl;
-}
+
 /* ---------- Blood pressure logs (per active member) ---------- */
 
 export function getBpLogs(): BloodPressureLog[] {
