@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRef } from 'react';
 import { User, Scale, Ruler, CheckCircle2, Activity, Download, Upload } from 'lucide-react';
-import { createBackup, getProfile, restoreBackup, saveProfile, type StoreBackup } from '@/lib/store';
+import { createBackup, restoreBackup, type StoreBackup } from '@/lib/store';
 import { useProfiles } from '@/hooks/useProfiles';
 import { calcBmi, getBmiCategory, bmiToPercent } from '@/lib/health';
 
@@ -19,12 +19,13 @@ function numOrNull(v: string): number | null {
 }
 
 export default function ProfileTab() {
-  const { updateActiveProfile } = useProfiles();
-  const initial = getProfile();
-  const [fullName, setFullName] = useState(initial.full_name);
-  const [weight, setWeight] = useState(initial.weight !== null ? String(initial.weight) : '');
-  const [height, setHeight] = useState(initial.height !== null ? String(initial.height) : '');
+  const { activeMember, updateActiveProfile } = useProfiles();
+  const [fullName, setFullName] = useState(activeMember?.full_name ?? '');
+  const [weight, setWeight] = useState(activeMember?.weight != null ? String(activeMember.weight) : '');
+  const [height, setHeight] = useState(activeMember?.height != null ? String(activeMember.height) : '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const backupInput = useRef<HTMLInputElement>(null);
 
   const weightNum = numOrNull(weight);
@@ -34,12 +35,27 @@ export default function ProfileTab() {
   const category = useMemo(() => getBmiCategory(bmi), [bmi]);
   const percent = bmiToPercent(bmi);
 
-  const handleSave = () => {
+  useEffect(() => {
+    setFullName(activeMember?.full_name ?? '');
+    setWeight(activeMember?.weight != null ? String(activeMember.weight) : '');
+    setHeight(activeMember?.height != null ? String(activeMember.height) : '');
+    setSaved(false);
+    setSaveError('');
+  }, [activeMember?.id, activeMember?.full_name, activeMember?.weight, activeMember?.height]);
+
+  const handleSave = async () => {
     const profile = { full_name: fullName.trim(), weight: weightNum, height: heightNum };
-    saveProfile(profile);
-    updateActiveProfile(profile);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setSaving(true);
+    setSaveError('');
+    try {
+      await updateActiveProfile(profile);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'บันทึกข้อมูลส่วนตัวไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const downloadBackup = () => {
@@ -119,10 +135,11 @@ export default function ProfileTab() {
           </div>
 
           <button
-            onClick={handleSave}
+            onClick={() => void handleSave()}
+            disabled={saving}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-brand-700 hover:shadow-md active:scale-95"
           >
-            {saved ? (
+            {saving ? 'กำลังบันทึก...' : saved ? (
               <>
                 <CheckCircle2 className="h-4 w-4" />
                 บันทึกแล้ว
@@ -131,6 +148,7 @@ export default function ProfileTab() {
               'บันทึกข้อมูลส่วนตัว'
             )}
           </button>
+          {saveError && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{saveError}</p>}
         </div>
       </div>
 
