@@ -19,7 +19,7 @@ type ProfilesContextValue = {
   activeMember: FamilyMember | undefined;
   switchProfile: (id: string) => void;
   addMember: (name: string) => void;
-  updateActiveProfile: (profile: Profile) => void;
+  updateActiveProfile: (profile: Profile) => Promise<void>;
 };
 
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
@@ -58,8 +58,9 @@ export function ProfilesProvider({ children }: { children: ReactNode }) {
     setActiveId(member.id);
   }, []);
 
-  const updateActiveProfile = useCallback((profile: Profile) => {
-    setMembers(updateMember(getActiveMemberId(), profile));
+  const updateActiveProfile = useCallback(async (profile: Profile) => {
+    const next = await updateMember(getActiveMemberId(), profile);
+    setMembers(next);
   }, []);
 
   const activeMember = members.find((m) => m.id === activeId);
